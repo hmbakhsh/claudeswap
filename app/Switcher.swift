@@ -30,7 +30,7 @@ let notifierPath = Bundle.main.bundlePath + "/Contents/Helpers/ClaudeSwap Notifi
 /// Display names people give their accounts, keyed by email. Stored in the app's defaults so the watcher sees them too.
 enum Nicknames {
     static let key = "nicknames"
-    static let demo = ["sam@studio.co": "Work", "sam.personal@gmail.com": "Personal", "sam@sidegig.dev": "Side gig"]
+    static let demo = ["sam@studio.co": "Work"]
 
     static func all() -> [String: String] {
         isDemo ? demo : (UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:])
@@ -174,9 +174,6 @@ struct ConfigValue: Decodable {
     let isSet: Bool?
 }
 
-struct Release: Decodable {
-    let tag_name: String
-}
 
 // MARK: - Model
 
@@ -427,11 +424,14 @@ final class Model: ObservableObject {
         nicknames = Nicknames.all()
     }
 
+    /// Follows github.com's /releases/latest redirect (…/tag/vX.Y); unlike the API it isn't rate-limited.
     func checkForUpdate() async {
-        guard !isDemo, let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest"),
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let release = try? JSONDecoder().decode(Release.self, from: data) else { return }
-        let v = release.tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+        guard !isDemo, let url = URL(string: "https://github.com/\(repo)/releases/latest") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let final = response.url, final.path.contains("/tag/") else { return }
+        let v = final.lastPathComponent.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
         latestVersion = v.compare(appVersion, options: .numeric) == .orderedDescending ? v : nil
     }
 
@@ -921,9 +921,9 @@ struct Meter: View {
                 .gaugeStyle(.accessoryLinearCapacity)
                 .tint(color)
                 .frame(width: 64)
-            Text("\(label) \(window.map { "\(Int($0.pct))%" } ?? "–")")
+            (Text(label + " ").foregroundColor(.secondary)
+                + Text(window.map { "\(Int($0.pct))%" } ?? "–").foregroundColor(.primary).fontWeight(.medium))
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
         }
         .help(resets)
     }
