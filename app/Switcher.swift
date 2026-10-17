@@ -21,6 +21,7 @@ let updateCheckSeconds: TimeInterval = 6 * 3600
 let repo = "hmbakhsh/claudeswap"
 let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 let autoDefaultedKey = "autoSwitchDefaulted"
+let notifierVersionKey = "notifierVersion"
 let isDemo = ProcessInfo.processInfo.environment["CAS_DEMO"] != nil
 /// The notifier helper bundled inside the app (see build.sh); the auto-switch LaunchAgent runs it.
 let notifierPath = Bundle.main.bundlePath + "/Contents/Helpers/ClaudeSwap Notifier.app/Contents/MacOS/switcher"
@@ -389,11 +390,17 @@ final class Model: ObservableObject {
         }
         let plist = NSDictionary(contentsOfFile: autoPlist)
         let program = (plist?["ProgramArguments"] as? [String])?.first
-        if installed, program != notifierPath { await setAuto(true) }
+        if installed, program != notifierPath { return await setAuto(true) }
+        // After an update the notifier is still the old binary; restart it once per new version.
+        if installed, d.string(forKey: notifierVersionKey) != appVersion {
+            await Shell.run("launchctl kickstart -k gui/\(getuid())/\(autoLabel)")
+        }
+        d.set(appVersion, forKey: notifierVersionKey)
     }
 
     func setAuto(_ on: Bool) async {
         UserDefaults.standard.set(true, forKey: autoDefaultedKey)
+        UserDefaults.standard.set(appVersion, forKey: notifierVersionKey)
         let uid = getuid()
         await Shell.run("launchctl bootout gui/\(uid)/\(autoLabel)")
         if on {
