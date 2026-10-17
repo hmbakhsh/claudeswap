@@ -328,7 +328,7 @@ struct ContentView: View {
             case .ready: ReadyView()
             }
         }
-        .frame(width: 480, height: 600)
+        .frame(width: 480, height: 510)
         // Demo screenshots: render in the active (key-window) style even when focus is elsewhere.
         .environment(\.controlActiveState, isDemo ? .key : controlActiveState)
         .sheet(item: $model.signIn) { _ in SignInSheet() }
@@ -468,86 +468,91 @@ struct ReadyView: View {
     @EnvironmentObject var model: Model
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 14) {
-                    AppIcon(size: 52)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Claude Account Switcher").font(.title3.weight(.semibold))
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(model.autoOn ? Color.green : Color.secondary)
-                                .frame(width: 7, height: 7)
-                            Text(model.autoOn ? "Switching automatically" : "Automatic switching is off")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                AppIcon(size: 40)
+                Text("Claude Account Switcher").font(.title3.weight(.semibold))
+                Spacer()
+                if model.busy { ProgressView().controlSize(.small) }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 6)
+
+            Form {
+                if let email = model.unsavedSignedIn {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.title2)
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(email).lineLimit(1).truncationMode(.middle)
+                                Text("You're signed in to Claude with this account.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Save") { Task { await model.saveSignedIn() } }
                         }
                     }
-                    Spacer()
-                    if model.busy { ProgressView().controlSize(.small) }
                 }
-                .padding(.vertical, 4)
-            }
 
-            if let email = model.unsavedSignedIn {
                 Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.title2)
-                            .foregroundStyle(Color.accentColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(email).lineLimit(1).truncationMode(.middle)
-                            Text("You're signed in to Claude with this account.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    if model.accounts.isEmpty {
+                        Text("No accounts yet").foregroundStyle(.secondary)
+                    }
+                    ForEach(model.accounts) { AccountRow(account: $0) }
+                } header: {
+                    Text("Accounts")
+                } footer: {
+                    HStack {
+                        Button("Add Account…") { model.startSignIn() }
+                            .disabled(model.busy)
                         Spacer()
-                        Button("Save") { Task { await model.saveSignedIn() } }
+                        Button { Task { await model.refresh() } } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh usage")
                     }
                 }
             }
+            .formStyle(.grouped)
 
-            Section {
-                if model.accounts.isEmpty {
-                    Text("No accounts yet").foregroundStyle(.secondary)
-                }
-                ForEach(model.accounts) { AccountRow(account: $0) }
-            } header: {
-                Text("Accounts")
-            } footer: {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingRow(title: "Switch automatically",
+                           detail: "When an account reaches \(threshold)% of its 5-hour or weekly limit.",
+                           isOn: Binding(get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } }))
+                SettingRow(title: "Show in menu bar",
+                           detail: "See usage and switch accounts from the top of your screen.",
+                           isOn: Binding(get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } }))
                 HStack {
-                    Button("Add Account…") { model.startSignIn() }
-                        .disabled(model.busy)
-                    Spacer()
-                    Button { Task { await model.refresh() } } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Refresh usage")
-                }
-            }
-
-            Section {
-                Toggle(isOn: Binding(get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } })) {
-                    Text("Switch automatically")
-                    Text("When an account reaches \(threshold)% of its 5-hour or weekly limit.")
-                }
-                Toggle(isOn: Binding(get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } })) {
-                    Text("Show in menu bar")
-                    Text("See usage and switch accounts from the top of your screen.")
-                }
-            } header: {
-                Text("Settings")
-            } footer: {
-                VStack(alignment: .leading, spacing: 8) {
                     ErrorText()
+                    Spacer()
                     Button("Open Log") { NSWorkspace.shared.open(URL(fileURLWithPath: logPath)) }
                         .buttonStyle(.link)
                         .font(.caption)
                 }
             }
+            .padding(.horizontal, 30)
+            .padding(.bottom, 20)
         }
-        .formStyle(.grouped)
+    }
+}
+
+struct SettingRow: View {
+    let title: String, detail: String
+    let isOn: Binding<Bool>
+
+    var body: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
     }
 }
 
