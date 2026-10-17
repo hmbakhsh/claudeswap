@@ -1,6 +1,9 @@
 # Claude Account Switcher
 
-<p align="center"><img src="docs/screenshot.png" width="460" alt="Claude Account Switcher window showing three accounts with 5-hour and weekly usage bars"></p>
+<p align="center">
+  <img src="docs/welcome.png" width="400" alt="Welcome screen">
+  <img src="docs/screenshot.png" width="400" alt="Accounts screen with 5-hour and weekly usage for three accounts">
+</p>
 
 Got more than one Claude subscription? This Mac app keeps Claude Code and T3 Code on whichever account has the most usage left. Before one runs out, it switches to another on its own.
 

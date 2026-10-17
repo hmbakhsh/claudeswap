@@ -13,6 +13,7 @@ let menubarPlist = "\(home)/Library/LaunchAgents/com.cswap.menubar.plist"
 let logPath = "\(home)/Library/Logs/claude-account-switcher.log"
 let threshold = 85
 let refreshSeconds: UInt64 = 60
+let isDemo = ProcessInfo.processInfo.environment["CAS_DEMO"] != nil
 
 // MARK: - Shell
 
@@ -141,7 +142,7 @@ final class Model: ObservableObject {
     }
 
     func refresh() async {
-        if ProcessInfo.processInfo.environment["CAS_DEMO"] != nil { return loadDemo() }
+        if isDemo { return loadDemo() }
         guard await Shell.exists("claude") else { phase = .needsClaude; return }
         guard await Shell.exists("cswap") else { phase = .needsSetup; return }
         if !checkedUpgrade {
@@ -164,8 +165,9 @@ final class Model: ObservableObject {
         phase = .ready
     }
 
-    /// Sample data for README screenshots: `CAS_DEMO=1 open -n <app>`.
+    /// Sample data for README screenshots: `CAS_DEMO=1` (accounts) or `CAS_DEMO=setup` (welcome).
     private func loadDemo() {
+        if ProcessInfo.processInfo.environment["CAS_DEMO"] == "setup" { phase = .needsSetup; return }
         func w(_ pct: Double, hours: Double) -> UsageWindow {
             UsageWindow(pct: pct, resetsAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(hours * 3600)))
         }
@@ -182,6 +184,10 @@ final class Model: ObservableObject {
         autoOn = true
         menubarOn = true
         phase = .ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        }
     }
 
     func install() async {
@@ -310,23 +316,21 @@ final class Model: ObservableObject {
 
 struct ContentView: View {
     @EnvironmentObject var model: Model
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
-        VStack(spacing: 0) {
-            Header()
-            Divider()
-            Group {
-                switch model.phase {
-                case .loading: Spacer(); ProgressView(); Spacer()
-                case .needsClaude: NeedsClaudeView()
-                case .needsSetup: SetupView()
-                case .installing: InstallingView()
-                case .ready: ReadyView()
-                }
+        Group {
+            switch model.phase {
+            case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .needsClaude: NeedsClaudeView()
+            case .needsSetup: SetupView()
+            case .installing: InstallingView()
+            case .ready: ReadyView()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 460, height: 630)
+        .frame(width: 480, height: 600)
+        // Demo screenshots: render in the active (key-window) style even when focus is elsewhere.
+        .environment(\.controlActiveState, isDemo ? .key : controlActiveState)
         .sheet(item: $model.signIn) { _ in SignInSheet() }
         .task {
             await model.refresh()
@@ -338,21 +342,12 @@ struct ContentView: View {
     }
 }
 
-struct Header: View {
+struct AppIcon: View {
+    let size: CGFloat
     var body: some View {
-        HStack(spacing: 14) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 52, height: 52)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Claude Account Switcher").font(.title2.bold())
-                Text("Stays on whichever Claude account has the most usage left.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(20)
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .frame(width: size, height: size)
     }
 }
 
@@ -367,61 +362,89 @@ struct ErrorText: View {
     }
 }
 
+/// Centered welcome-style layout shared by the setup, installing and "needs Claude" screens.
+struct Onboarding<Body: View, Footer: View>: View {
+    let title: String
+    @ViewBuilder let content: Body
+    @ViewBuilder let footer: Footer
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            AppIcon(size: 96)
+            Text(title)
+                .font(.system(size: 26, weight: .bold))
+                .multilineTextAlignment(.center)
+                .padding(.top, 16)
+            content
+                .padding(.top, 32)
+                .padding(.horizontal, 48)
+            Spacer(minLength: 24)
+            VStack(spacing: 10) { footer }
+                .padding(.bottom, 36)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct NeedsClaudeView: View {
     @EnvironmentObject var model: Model
     var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "terminal").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("Install Claude Code first").font(.title3.bold())
-            Text("This app works with Claude Code. Install it, then come back.")
+        Onboarding(title: "Install Claude Code First") {
+            Text("Claude Account Switcher works with Claude Code. Install it, then come back here.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            HStack {
-                Link("How to install", destination: URL(string: "https://docs.claude.com/en/docs/claude-code/setup")!)
-                    .buttonStyle(.borderedProminent)
-                Button("Check again") { Task { await model.refresh() } }
+        } footer: {
+            Link(destination: URL(string: "https://docs.claude.com/en/docs/claude-code/setup")!) {
+                Text("Get Claude Code").frame(width: 200)
             }
-            Spacer()
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            Button("Check Again") { Task { await model.refresh() } }
+                .buttonStyle(.link)
         }
-        .padding(30)
     }
 }
 
 struct SetupView: View {
     @EnvironmentObject var model: Model
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Spacer()
-            Feature(icon: "person.2.fill", title: "Use all your subscriptions",
-                    text: "Save each Claude account you pay for.")
-            Feature(icon: "arrow.triangle.2.circlepath", title: "Switches on its own",
-                    text: "When one reaches \(threshold)% of its limit, Claude moves to the account with the most left.")
-            Feature(icon: "lock.fill", title: "Stays on your Mac",
-                    text: "Logins are kept in your Mac's Keychain. Nothing is sent anywhere.")
-            Spacer()
+        Onboarding(title: "Welcome to\nClaude Account Switcher") {
+            VStack(alignment: .leading, spacing: 22) {
+                Feature(icon: "person.2.fill", color: .blue, title: "All your subscriptions",
+                        text: "Save each Claude account you pay for.")
+                Feature(icon: "arrow.triangle.2.circlepath", color: .orange, title: "Switches on its own",
+                        text: "At \(threshold)% of a limit, Claude moves to the account with the most left.")
+                Feature(icon: "lock.fill", color: .green, title: "Private by design",
+                        text: "Logins stay in your Mac's Keychain. Nothing is sent anywhere.")
+            }
+        } footer: {
             ErrorText()
             Button { Task { await model.install() } } label: {
-                Text("Set up").frame(maxWidth: .infinity)
+                Text("Continue").frame(width: 200)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+            Text("Setup takes about a minute.").font(.caption).foregroundStyle(.secondary)
         }
-        .padding(28)
     }
 }
 
 struct Feature: View {
-    let icon: String, title: String, text: String
+    let icon: String, color: Color, title: String, text: String
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 16) {
             Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 32)
+                .font(.system(size: 26))
+                .foregroundStyle(color)
+                .frame(width: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline)
-                Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -430,65 +453,118 @@ struct Feature: View {
 struct InstallingView: View {
     @EnvironmentObject var model: Model
     var body: some View {
-        VStack(spacing: 14) {
-            ProgressView().controlSize(.large)
-            Text(model.progress).foregroundStyle(.secondary)
-            Text("This takes about a minute.").font(.caption).foregroundStyle(.tertiary)
+        Onboarding(title: "Setting Up…") {
+            VStack(spacing: 12) {
+                ProgressView().controlSize(.regular)
+                Text(model.progress).foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text("This takes about a minute.").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
 
 struct ReadyView: View {
     @EnvironmentObject var model: Model
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Accounts").font(.headline)
-                Spacer()
-                if model.busy { ProgressView().controlSize(.small) }
-            }
-            if let email = model.unsavedSignedIn {
-                HStack {
-                    Image(systemName: "person.crop.circle.badge.plus").foregroundStyle(Color.accentColor)
-                    Text("Signed in as **\(email)**").lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("Save") { Task { await model.saveSignedIn() } }
-                }
-                .padding(10)
-                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-            }
-            ScrollView {
-                VStack(spacing: 10) {
-                    if model.accounts.isEmpty {
-                        Text("No accounts saved yet.").foregroundStyle(.secondary).padding(.vertical, 20)
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    AppIcon(size: 52)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Claude Account Switcher").font(.title3.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(model.autoOn ? Color.green : Color.secondary)
+                                .frame(width: 7, height: 7)
+                            Text(model.autoOn ? "Switching automatically" : "Automatic switching is off")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    ForEach(model.accounts) { AccountRow(account: $0) }
+                    Spacer()
+                    if model.busy { ProgressView().controlSize(.small) }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let email = model.unsavedSignedIn {
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.title2)
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(email).lineLimit(1).truncationMode(.middle)
+                            Text("You're signed in to Claude with this account.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Save") { Task { await model.saveSignedIn() } }
+                    }
                 }
             }
-            Button { model.startSignIn() } label: {
-                Label("Add account", systemImage: "plus").frame(maxWidth: .infinity)
-            }
-            .controlSize(.large)
-            .disabled(model.busy)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Switch automatically at \(threshold)% used", isOn: Binding(
-                    get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } }))
-                Toggle("Show usage in the menu bar", isOn: Binding(
-                    get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } }))
+            Section {
+                if model.accounts.isEmpty {
+                    Text("No accounts yet").foregroundStyle(.secondary)
+                }
+                ForEach(model.accounts) { AccountRow(account: $0) }
+            } header: {
+                Text("Accounts")
+            } footer: {
+                HStack {
+                    Button("Add Account…") { model.startSignIn() }
+                        .disabled(model.busy)
+                    Spacer()
+                    Button { Task { await model.refresh() } } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Refresh usage")
+                }
             }
-            .toggleStyle(.switch)
 
-            ErrorText()
-            HStack {
-                Button("Open log") { NSWorkspace.shared.open(URL(fileURLWithPath: logPath)) }
-                    .buttonStyle(.link)
-                Spacer()
-                Button("Refresh") { Task { await model.refresh() } }
+            Section {
+                Toggle(isOn: Binding(get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } })) {
+                    Text("Switch automatically")
+                    Text("When an account reaches \(threshold)% of its 5-hour or weekly limit.")
+                }
+                Toggle(isOn: Binding(get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } })) {
+                    Text("Show in menu bar")
+                    Text("See usage and switch accounts from the top of your screen.")
+                }
+            } header: {
+                Text("Settings")
+            } footer: {
+                VStack(alignment: .leading, spacing: 8) {
+                    ErrorText()
+                    Button("Open Log") { NSWorkspace.shared.open(URL(fileURLWithPath: logPath)) }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
             }
-            .font(.callout)
         }
-        .padding(20)
+        .formStyle(.grouped)
+    }
+}
+
+struct Avatar: View {
+    let email: String
+    private static let palette: [Color] = [.blue, .purple, .pink, .orange, .teal, .indigo, .mint]
+
+    var body: some View {
+        let color = Self.palette[email.unicodeScalars.reduce(0) { $0 + Int($1.value) } % Self.palette.count]
+        Circle()
+            .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .top, endPoint: .bottom))
+            .overlay(
+                Text(email.prefix(1).uppercased())
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+            )
+            .frame(width: 34, height: 34)
     }
 }
 
@@ -496,71 +572,77 @@ struct AccountRow: View {
     @EnvironmentObject var model: Model
     let account: Account
 
+    private var canFix: Bool { account.needsSignIn && account.email == model.signedInEmail }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(account.email).font(.headline).lineLimit(1).truncationMode(.middle)
-                if account.isActive {
-                    Text("In use")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Color.green.opacity(0.2), in: Capsule())
-                        .foregroundStyle(.green)
+        HStack(spacing: 12) {
+            Avatar(email: account.email)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(account.email).lineLimit(1).truncationMode(.middle)
+                    if account.isActive {
+                        Text("In Use")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Color.green, in: Capsule())
+                    }
                 }
-                Spacer()
-                if account.needsSignIn && account.email == model.signedInEmail {
-                    // Claude itself is still signed in as this account; just re-save it.
+                if account.needsSignIn {
+                    Text(canFix ? "Saved login is out of date." : "Signed out.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if let u = account.shownUsage {
+                    HStack(spacing: 14) {
+                        Meter(label: "5h", window: u.fiveHour)
+                        Meter(label: "Week", window: u.sevenDay)
+                    }
+                } else {
+                    Text("Usage not available yet").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            Group {
+                if canFix {
                     Button("Fix") { Task { await model.saveSignedIn(slot: account.number) } }
                 } else if account.needsSignIn {
-                    Button("Sign in again") { model.startSignIn(slot: account.number) }
+                    Button("Sign In…") { model.startSignIn(slot: account.number) }
                 } else if !account.isActive {
                     Button("Use") { Task { await model.use(account) } }
                 }
             }
-            if account.needsSignIn {
-                Label(account.email == model.signedInEmail
-                      ? "Saved login is out of date. Click Fix to update it."
-                      : "Signed out. Sign in again to keep using it.",
-                      systemImage: "exclamationmark.circle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-            } else if let u = account.shownUsage {
-                UsageBar(label: "5-hour", window: u.fiveHour)
-                UsageBar(label: "Weekly", window: u.sevenDay)
-            } else {
-                Text("Usage not available yet.").font(.callout).foregroundStyle(.secondary)
-            }
+            .controlSize(.small)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(account.isActive ? Color.green.opacity(0.5) : Color.secondary.opacity(0.2)))
+        .padding(.vertical, 3)
         .contextMenu {
-            Button("Remove account", role: .destructive) { Task { await model.remove(account) } }
+            Button("Remove Account", role: .destructive) { Task { await model.remove(account) } }
         }
     }
 }
 
-struct UsageBar: View {
+struct Meter: View {
     let label: String
     let window: UsageWindow?
 
-    var color: Color {
-        let p = window?.pct ?? 0
-        return p < 60 ? .green : p < Double(threshold) ? .orange : .red
-    }
-
-    var resets: String {
+    private var pct: Double { window?.pct ?? 0 }
+    private var color: Color { pct < 60 ? .green : pct < Double(threshold) ? .orange : .red }
+    private var resets: String {
         guard let s = window?.resetsAt, let d = ISO8601DateFormatter().date(from: s) else { return "" }
-        return "resets " + RelativeDateTimeFormatter().localizedString(for: d, relativeTo: Date())
+        return "Resets " + RelativeDateTimeFormatter().localizedString(for: d, relativeTo: Date())
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(label).font(.caption).foregroundStyle(.secondary).frame(width: 46, alignment: .leading)
-            ProgressView(value: min((window?.pct ?? 0) / 100, 1)).tint(color)
-            Text(window.map { "\(Int($0.pct))%" } ?? "–").font(.caption.monospacedDigit()).frame(width: 34, alignment: .trailing)
-            Text(resets).font(.caption2).foregroundStyle(.tertiary).frame(width: 88, alignment: .leading)
+        HStack(spacing: 6) {
+            Gauge(value: min(pct, 100), in: 0...100) { EmptyView() }
+                .gaugeStyle(.accessoryLinearCapacity)
+                .tint(color)
+                .frame(width: 64)
+            Text("\(label) \(window.map { "\(Int($0.pct))%" } ?? "–")")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
+        .help(resets)
     }
 }
 
@@ -569,23 +651,38 @@ struct SignInSheet: View {
     @State private var code = ""
 
     var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-            Text("Sign in with your browser").font(.title3.bold())
-            Text("A browser tab just opened. Sign in with the Claude account you want to add.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("If the page shows a code, paste it here:").font(.callout)
-                HStack {
-                    TextField("Code", text: $code).textFieldStyle(.roundedBorder)
-                    Button("Continue") { model.submitCode(code) }.disabled(code.isEmpty)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "person.badge.key.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sign In to Claude").font(.headline)
+                    Text("Finish signing in with your browser, using the account you want to add.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Button("Cancel", role: .cancel) { model.cancelSignIn() }
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Waiting for your browser…").font(.callout).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("If the page shows a code, paste it here.").font(.caption).foregroundStyle(.secondary)
+                TextField("Code", text: $code).textFieldStyle(.roundedBorder)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { model.cancelSignIn() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Continue") { model.submitCode(code) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(code.isEmpty)
+            }
         }
-        .padding(26)
-        .frame(width: 400)
+        .padding(20)
+        .frame(width: 380)
     }
 }
 
@@ -602,6 +699,7 @@ struct SwitcherApp: App {
         Window("Claude Account Switcher", id: "main") {
             ContentView().environmentObject(model)
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
     }
 }
