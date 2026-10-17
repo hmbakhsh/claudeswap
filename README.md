@@ -9,13 +9,31 @@ Got more than one Claude subscription? This Mac app keeps Claude Code and T3 Cod
 
 ## Install (1 minute)
 
+### Easiest: let Claude Code do it
+
+Copy this prompt and paste it into Claude Code (or T3 Code):
+
+```text
+Install Claude Account Switcher for me (https://github.com/hmbakhsh/claude-account-switcher) on this Mac.
+
+1. If Homebrew is installed, run: brew install --cask hmbakhsh/tap/claude-account-switcher
+   If it isn't, run: curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claude-account-switcher/main/install.sh | bash
+2. Open it: open "/Applications/Claude Account Switcher.app"
+3. Tell me in plain words what to do next in the app window: click Continue, then click
+   "Add Account…" once for each Claude subscription I have and sign in with that account in the browser.
+
+Don't read, copy or change any Claude credentials or Keychain entries yourself. The app handles sign-in.
+```
+
+### Or do it yourself
+
 Open the **Terminal** app (press ⌘ Space and type "Terminal"), paste this line, then press Enter:
 
 ```bash
 brew install --cask hmbakhsh/tap/claude-account-switcher
 ```
 
-Then open **Claude Account Switcher** from your Applications folder. Click **Set up**, then **Add account** once for each Claude subscription you have.
+Then open **Claude Account Switcher** from your Applications folder. Click **Continue**, then **Add Account…** once for each Claude subscription you have.
 
 To update: `brew upgrade --cask claude-account-switcher`
 
