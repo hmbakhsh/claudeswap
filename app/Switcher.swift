@@ -475,7 +475,9 @@ struct ReadyView: View {
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
             }
-            .padding(.horizontal, 24)
+            // The icon art has ~4pt of transparent margin; offset so the tile lines up at 20pt.
+            .padding(.leading, 16)
+            .padding(.trailing, 20)
             .padding(.top, 6)
 
             Form {
@@ -503,7 +505,8 @@ struct ReadyView: View {
                     }
                     ForEach(model.accounts) { AccountRow(account: $0) }
                 } header: {
-                    Text("Accounts")
+                    // Grouped forms inset headers 10pt; pull it flush with the box outline.
+                    Text("Accounts").padding(.leading, -10)
                 } footer: {
                     HStack {
                         Button("Add Account…") { model.startSignIn() }
@@ -534,7 +537,7 @@ struct ReadyView: View {
                         .font(.caption)
                 }
             }
-            .padding(.horizontal, 30)
+            .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
     }
