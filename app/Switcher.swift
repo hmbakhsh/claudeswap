@@ -1,10 +1,9 @@
 // ClaudeSwap — a small native window over claude-swap (cswap).
 // Lists accounts with live usage, adds accounts via browser sign-in, and turns
 // auto-switching / the cswap menu bar icon on and off. All real work is cswap.
-// The same binary run with `--watch` is the background notifier (Watcher.swift).
+// The same binary, run with `--watch` from a helper bundle, is the background notifier (Watcher.swift).
 import AppKit
 import SwiftUI
-import UserNotifications
 
 let home = FileManager.default.homeDirectoryForCurrentUser.path
 // Finder-launched apps get a bare PATH; add where uv, cswap and claude live.
@@ -23,6 +22,8 @@ let repo = "hmbakhsh/claudeswap"
 let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 let autoDefaultedKey = "autoSwitchDefaulted"
 let isDemo = ProcessInfo.processInfo.environment["CAS_DEMO"] != nil
+/// The notifier helper bundled inside the app (see build.sh); the auto-switch LaunchAgent runs it.
+let notifierPath = Bundle.main.bundlePath + "/Contents/Helpers/ClaudeSwap Notifier.app/Contents/MacOS/switcher"
 
 // MARK: - Shared helpers (app and watcher)
 
@@ -381,7 +382,7 @@ final class Model: ObservableObject {
     }
 
     /// Turns auto-switching on the first time for installs that never went through setup, and
-    /// points older LaunchAgents (bare `cswap auto`) at this app's notifying watcher.
+    /// points older LaunchAgents (bare `cswap auto`, or the app itself) at the notifier helper.
     private func prepareAuto() async {
         let d = UserDefaults.standard
         let installed = FileManager.default.fileExists(atPath: autoPlist)
@@ -391,7 +392,7 @@ final class Model: ObservableObject {
         }
         let plist = NSDictionary(contentsOfFile: autoPlist)
         let program = (plist?["ProgramArguments"] as? [String])?.first
-        if installed, program != Bundle.main.executablePath { await setAuto(true) }
+        if installed, program != notifierPath { await setAuto(true) }
     }
 
     func setAuto(_ on: Bool) async {
@@ -399,10 +400,9 @@ final class Model: ObservableObject {
         let uid = getuid()
         await Shell.run("launchctl bootout gui/\(uid)/\(autoLabel)")
         if on {
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
             let plist: [String: Any] = [
                 "Label": autoLabel,
-                "ProgramArguments": [Bundle.main.executablePath ?? "", "--watch"],
+                "ProgramArguments": [notifierPath, "--watch"],
                 "EnvironmentVariables": ["PATH": shellPath],
                 "RunAtLoad": true,
                 "KeepAlive": true,
@@ -976,7 +976,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 enum Entry {
     static func main() {
-        if CommandLine.arguments.contains("--watch") { Watcher.run() } else { SwitcherApp.main() }
+        guard CommandLine.arguments.contains("--watch") else { return SwitcherApp.main() }
+        // 1.9 LaunchAgents ran the app binary itself, which made macOS think the app was open.
+        // Hand off to the helper so the window can still be opened.
+        if Bundle.main.bundleIdentifier != "dev.claude-swap.notifier", FileManager.default.isExecutableFile(atPath: notifierPath) {
+            let args = [notifierPath] + CommandLine.arguments.dropFirst()
+            var cargs = args.map { strdup($0) } + [nil]
+            execv(notifierPath, &cargs)
+        }
+        Watcher.run()
     }
 }
 

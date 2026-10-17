@@ -41,6 +41,16 @@ cat >"$APP/Contents/Info.plist" <<EOF
 </dict>
 </plist>
 EOF
+# Background notifier: same binary in its own bundle (own ID, no Dock icon), so macOS doesn't
+# treat it as the app already running and refuse to open the window.
+HELPER="$APP/Contents/Helpers/ClaudeSwap Notifier.app"
+mkdir -p "$HELPER/Contents/MacOS" "$HELPER/Contents/Resources"
+cp "$APP/Contents/MacOS/switcher" "$HELPER/Contents/MacOS/switcher"
+cp "$APP/Contents/Resources/AppIcon.icns" "$HELPER/Contents/Resources/"
+sed -e 's/dev.claude-swap.switcher/dev.claude-swap.notifier/' \
+    -e 's#<key>NSHighResolutionCapable</key><true/>#<key>NSHighResolutionCapable</key><true/>\
+  <key>LSUIElement</key><true/>#' "$APP/Contents/Info.plist" >"$HELPER/Contents/Info.plist"
+
 codesign --force --deep --sign - "$APP"
 (cd "$OUT" && rm -f "$ZIP" && ditto -c -k --keepParent "$NAME.app" "$ZIP")
 echo "Built $OUT/$ZIP"

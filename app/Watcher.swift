@@ -164,7 +164,9 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler done: @escaping () -> Void) {
-        NSWorkspace.shared.open(Bundle.main.bundleURL)
+        // Helper lives at ClaudeSwap.app/Contents/Helpers/…; open the app around it.
+        let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        NSWorkspace.shared.open(app)
         done()
     }
 
