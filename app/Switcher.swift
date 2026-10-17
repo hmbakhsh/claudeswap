@@ -591,10 +591,10 @@ struct AccountRow: View {
                     if account.isActive {
                         Text("In Use")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.inUse)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
-                            .background(Color.green, in: Capsule())
+                            .background(Color.inUse.opacity(0.18), in: Capsule())
                     }
                 }
                 if account.needsSignIn {
@@ -627,6 +627,15 @@ struct AccountRow: View {
             Button("Remove Account", role: .destructive) { Task { await model.remove(account) } }
         }
     }
+}
+
+extension Color {
+    /// Readable green for text: system green in Dark Mode, a deeper green in Light Mode (≥4.5:1).
+    static let inUse = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1)
+            : NSColor(red: 0.10, green: 0.50, blue: 0.22, alpha: 1)
+    })
 }
 
 struct Meter: View {
