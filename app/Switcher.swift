@@ -443,7 +443,7 @@ final class Model: ObservableObject {
         let viaBrew = ["/opt/homebrew/Caskroom/claudeswap", "/usr/local/Caskroom/claudeswap"]
             .contains { FileManager.default.fileExists(atPath: $0) }
         let cmd = viaBrew
-            ? "brew upgrade --cask claudeswap && open '\(app)'"
+            ? "brew update --quiet && brew upgrade --cask claudeswap && open '\(app)'"
             : "curl -fsSL https://raw.githubusercontent.com/\(repo)/main/install.sh | bash"
         Shell.log("$ \(cmd)")
         let p = Shell.process(cmd)
@@ -451,8 +451,9 @@ final class Model: ObservableObject {
         p.standardError = Shell.logHandle()
         p.terminationHandler = { proc in
             Task { @MainActor in
+                // Still running means the update didn't replace us (failed, or brew saw nothing new).
                 self.updating = false
-                if proc.terminationStatus != 0 { self.error = "Update didn't finish. See the log." }
+                self.error = "Update didn't finish. See the log."
             }
         }
         do { try p.run() } catch {
