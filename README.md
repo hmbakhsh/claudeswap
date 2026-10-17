@@ -32,7 +32,8 @@ Download **Claude-Account-Switcher.zip** from the [latest release](https://githu
 
 ## Later
 
-- **Add an account or uninstall:** open the app again.
+- **Add an account:** open the app and click **Add Account…**.
+- **Uninstall:** `brew uninstall --zap --cask claude-account-switcher`. This also stops auto-switching and removes the menu bar icon.
 - **Switch now:** click the menu bar icon and pick an account.
 - It keeps running after you restart your Mac.
 
