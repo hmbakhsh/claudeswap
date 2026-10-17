@@ -37,6 +37,8 @@ Then open **ClaudeSwap** from your Applications folder. Click **Continue**, then
 
 To update: `brew upgrade --cask claudeswap`
 
+Installed it back when it was called Claude Account Switcher? Run the install line above once. It replaces the old app and keeps your accounts.
+
 No Homebrew? Use this line instead. Run it again any time to update:
 
 ```bash
