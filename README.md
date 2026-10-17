@@ -1,5 +1,7 @@
 # Claude Account Switcher
 
+<p align="center"><img src="docs/screenshot.png" width="460" alt="Claude Account Switcher window showing three accounts with 5-hour and weekly usage bars"></p>
+
 Got more than one Claude subscription? This Mac app keeps Claude Code and T3 Code on whichever account has the most usage left. Before one runs out, it switches to another on its own.
 
 ## Install (1 minute)
@@ -41,4 +43,4 @@ Download **Claude-Account-Switcher.zip** from the [latest release](https://githu
 
 ---
 
-*For maintainers:* the app is a small SwiftUI wrapper (`app/Switcher.swift`) around [claude-swap](https://github.com/realiti4/claude-swap). To build it locally, run `app/build.sh`. To publish a release, run `./release.sh 1.1`. It tags the release, CI builds the app and attaches it to a GitHub release, then the script bumps the cask in [hmbakhsh/homebrew-tap](https://github.com/hmbakhsh/homebrew-tap). Terminal users can run `setup.sh` instead of the app.
+*For maintainers:* the app is a small SwiftUI wrapper (`app/Switcher.swift`) around [claude-swap](https://github.com/realiti4/claude-swap). To build it locally, run `app/build.sh`. To regenerate the README screenshot from sample data, run `app/screenshot.sh`. To publish a release, run `./release.sh 1.1`. It tags the release, CI builds the app and attaches it to a GitHub release, then the script bumps the cask in [hmbakhsh/homebrew-tap](https://github.com/hmbakhsh/homebrew-tap). Terminal users can run `setup.sh` instead of the app.

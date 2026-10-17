@@ -141,6 +141,7 @@ final class Model: ObservableObject {
     }
 
     func refresh() async {
+        if ProcessInfo.processInfo.environment["CAS_DEMO"] != nil { return loadDemo() }
         guard await Shell.exists("claude") else { phase = .needsClaude; return }
         guard await Shell.exists("cswap") else { phase = .needsSetup; return }
         if !checkedUpgrade {
@@ -160,6 +161,26 @@ final class Model: ObservableObject {
         signedInEmail = (status?.loggedIn ?? false) ? status?.email : nil
         autoOn = FileManager.default.fileExists(atPath: autoPlist)
         menubarOn = FileManager.default.fileExists(atPath: menubarPlist)
+        phase = .ready
+    }
+
+    /// Sample data for README screenshots: `CAS_DEMO=1 open -n <app>`.
+    private func loadDemo() {
+        func w(_ pct: Double, hours: Double) -> UsageWindow {
+            UsageWindow(pct: pct, resetsAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(hours * 3600)))
+        }
+        func a(_ n: Int, _ email: String, active: Bool, _ five: Double, _ week: Double, status: String = "ok") -> Account {
+            Account(number: n, email: email, active: active, usageStatus: status,
+                    usage: status == "ok" ? Usage(fiveHour: w(five, hours: 2.4), sevenDay: w(week, hours: 75)) : nil,
+                    lastGoodUsage: nil, disabled: nil)
+        }
+        accounts = [
+            a(1, "sam@studio.co", active: true, 38, 52),
+            a(2, "sam.personal@gmail.com", active: false, 6, 21),
+            a(3, "sam@sidegig.dev", active: false, 92, 71),
+        ]
+        autoOn = true
+        menubarOn = true
         phase = .ready
     }
 
@@ -305,7 +326,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 460, height: 580)
+        .frame(width: 460, height: 630)
         .sheet(item: $model.signIn) { _ in SignInSheet() }
         .task {
             await model.refresh()
