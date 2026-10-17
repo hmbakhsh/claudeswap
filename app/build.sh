@@ -38,6 +38,13 @@ cat >"$APP/Contents/Info.plist" <<EOF
   <key>CFBundleShortVersionString</key><string>${VERSION:-1.0}</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>dev.claude-swap.switcher</string>
+      <key>CFBundleURLSchemes</key><array><string>claudeswap</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 EOF
@@ -47,7 +54,8 @@ HELPER="$APP/Contents/Helpers/ClaudeSwap Notifier.app"
 mkdir -p "$HELPER/Contents/MacOS" "$HELPER/Contents/Resources"
 cp "$APP/Contents/MacOS/switcher" "$HELPER/Contents/MacOS/switcher"
 cp "$APP/Contents/Resources/AppIcon.icns" "$HELPER/Contents/Resources/"
-sed -e 's/dev.claude-swap.switcher/dev.claude-swap.notifier/' \
+sed -e '/<key>CFBundleURLTypes<\/key>/,/^  <\/array>/d' \
+    -e 's/dev.claude-swap.switcher/dev.claude-swap.notifier/' \
     -e 's#<key>NSHighResolutionCapable</key><true/>#<key>NSHighResolutionCapable</key><true/>\
   <key>LSUIElement</key><true/>#' "$APP/Contents/Info.plist" >"$HELPER/Contents/Info.plist"
 

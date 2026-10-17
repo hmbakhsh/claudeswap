@@ -18,9 +18,10 @@ Install ClaudeSwap for me (https://github.com/hmbakhsh/claudeswap) on this Mac.
 
 1. If Homebrew is installed, run: brew install --cask hmbakhsh/tap/claudeswap
    If it isn't, run: curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claudeswap/main/install.sh | bash
-2. Open it: open "/Applications/ClaudeSwap.app"
-3. Tell me in plain words what to do next in the app window: click Continue, then click
-   "Add Account…" once for each Claude subscription I have and sign in with that account in the browser.
+2. Start adding an account: open "claudeswap://add"
+3. Tell me in plain words what to do next: if the app shows a welcome screen, click Continue. Then sign in
+   in the browser with one of my Claude subscriptions. Ask me if I have another subscription, and if so
+   run open "claudeswap://add" again for each one.
 
 Don't read, copy or change any Claude credentials or Keychain entries yourself. The app handles sign-in.
 ```
@@ -52,7 +53,7 @@ Download **ClaudeSwap.zip** from the [latest release](https://github.com/hmbakhs
 
 ## Later
 
-- **Add an account:** open the app and click **Add Account…**.
+- **Add an account:** open the app and click **Add Account…**, or run `open claudeswap://add` in Terminal.
 - **Name an account:** click **⋯** next to it and choose **Rename…** (e.g. "Work", "Personal").
 - **Change when it switches:** pick a percentage next to **Switch at**.
 - **Update:** when a new version is out, the app shows an **Update** button.

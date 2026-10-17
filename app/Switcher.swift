@@ -209,6 +209,7 @@ final class Model: ObservableObject {
     @Published var latestVersion: String?
     @Published var updating = false
     @Published var renaming: Account?
+    private var pendingAdd = false
     private var checkedUpgrade = false
     private var lastUpdateCheck = Date.distantPast
 
@@ -248,6 +249,22 @@ final class Model: ObservableObject {
         autoOn = FileManager.default.fileExists(atPath: autoPlist)
         menubarOn = FileManager.default.fileExists(atPath: menubarPlist)
         phase = .ready
+        if pendingAdd {
+            pendingAdd = false
+            if signIn == nil { startSignIn() }
+        }
+    }
+
+    /// `claudeswap://add` starts Add Account (after setup, if the app isn't set up yet);
+    /// `claudeswap://open` just shows the window. Links only ever open things, never change accounts.
+    func handle(_ url: URL) {
+        NSApp.activate(ignoringOtherApps: true)
+        guard url.host == "add" else { return }
+        if phase == .ready, !busy {
+            if signIn == nil { startSignIn() }
+        } else {
+            pendingAdd = true
+        }
     }
 
     /// Sample data for README screenshots: `CAS_DEMO=1` (accounts) or `CAS_DEMO=setup` (welcome).
@@ -511,6 +528,7 @@ struct ContentView: View {
         .environment(\.controlActiveState, isDemo ? .key : controlActiveState)
         .sheet(item: $model.signIn) { _ in SignInSheet() }
         .task {
+            AppDelegate.openURL = { model.handle($0) }
             await model.refresh()
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: refreshSeconds * 1_000_000_000)
@@ -978,6 +996,18 @@ struct SignInSheet: View {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Links can arrive before the window exists (cold launch); hold them until the model is listening.
+    static var pendingURLs: [URL] = []
+    static var openURL: ((URL) -> Void)? {
+        didSet { pendingURLs.forEach { openURL?($0) }; pendingURLs = [] }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if let open = Self.openURL { open(url) } else { Self.pendingURLs.append(url) }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
