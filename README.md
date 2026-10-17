@@ -53,18 +53,22 @@ Download **ClaudeSwap.zip** from the [latest release](https://github.com/hmbakhs
 ## Later
 
 - **Add an account:** open the app and click **Add Account…**.
+- **Name an account:** click **⋯** next to it and choose **Rename…** (e.g. "Work", "Personal").
+- **Change when it switches:** pick a percentage next to **Switch at**.
+- **Update:** when a new version is out, the app shows an **Update** button.
 - **Uninstall:** `brew uninstall --zap --cask claudeswap`. This also stops auto-switching and removes the menu bar icon.
 - **Switch now:** click the menu bar icon and pick an account.
 - It keeps running after you restart your Mac.
 
 ## Good to know
 
-- An account switches when it reaches **85%** of its 5-hour or weekly limit.
+- An account switches when it reaches **85%** of its 5-hour or weekly limit (you can change this).
+- You get a notification when it switches, when every account is nearly used up, and when an account needs signing in again.
 - Claude sessions that are already open move to the new account within about 30 seconds.
-- Your logins stay in your Mac's Keychain. Nothing is sent anywhere.
+- Your logins stay in your Mac's Keychain. The app only talks to Anthropic (sign-in and usage) and GitHub (update checks).
 - Only add accounts that belong to you.
 - Something not working? Send the file `~/Library/Logs/claudeswap.log` to whoever shared the app.
 
 ---
 
-*For maintainers:* the app is a small SwiftUI wrapper (`app/Switcher.swift`) around [claude-swap](https://github.com/realiti4/claude-swap). To build it locally, run `app/build.sh`. To regenerate the README screenshot from sample data, run `app/screenshot.sh`. To publish a release, run `./release.sh 1.1`. It tags the release, CI builds the app and attaches it to a GitHub release, then the script bumps the cask in [hmbakhsh/homebrew-tap](https://github.com/hmbakhsh/homebrew-tap). Terminal users can run `setup.sh` instead of the app.
+*For maintainers:* the app is a small SwiftUI wrapper (`app/Switcher.swift`, plus `app/Watcher.swift` for background notifications) around [claude-swap](https://github.com/realiti4/claude-swap). To build it locally, run `app/build.sh`. To regenerate the README screenshot from sample data, run `app/screenshot.sh`. To publish a release, run `./release.sh 1.1`. It tags the release, CI builds the app and attaches it to a GitHub release, then the script bumps the cask in [hmbakhsh/homebrew-tap](https://github.com/hmbakhsh/homebrew-tap). Terminal users can run `setup.sh` instead of the app.

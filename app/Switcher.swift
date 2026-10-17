@@ -1,8 +1,10 @@
 // ClaudeSwap — a small native window over claude-swap (cswap).
 // Lists accounts with live usage, adds accounts via browser sign-in, and turns
 // auto-switching / the cswap menu bar icon on and off. All real work is cswap.
+// The same binary run with `--watch` is the background notifier (Watcher.swift).
 import AppKit
 import SwiftUI
+import UserNotifications
 
 let home = FileManager.default.homeDirectoryForCurrentUser.path
 // Finder-launched apps get a bare PATH; add where uv, cswap and claude live.
@@ -11,9 +13,69 @@ let autoLabel = "dev.claude-swap.auto"
 let autoPlist = "\(home)/Library/LaunchAgents/\(autoLabel).plist"
 let menubarPlist = "\(home)/Library/LaunchAgents/com.cswap.menubar.plist"
 let logPath = "\(home)/Library/Logs/claudeswap.log"
-let threshold = 85
+let defaultThreshold = 85
+let thresholdChoices = [75, 80, 85, 90, 95]
 let refreshSeconds: UInt64 = 60
+let baseHeight: CGFloat = 510
+let noticeHeight: CGFloat = 82
+let updateCheckSeconds: TimeInterval = 6 * 3600
+let repo = "hmbakhsh/claudeswap"
+let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+let autoDefaultedKey = "autoSwitchDefaulted"
 let isDemo = ProcessInfo.processInfo.environment["CAS_DEMO"] != nil
+
+// MARK: - Shared helpers (app and watcher)
+
+/// Display names people give their accounts, keyed by email. Stored in the app's defaults so the watcher sees them too.
+enum Nicknames {
+    static let key = "nicknames"
+    static let demo = ["sam@studio.co": "Work", "sam.personal@gmail.com": "Personal", "sam@sidegig.dev": "Side gig"]
+
+    static func all() -> [String: String] {
+        isDemo ? demo : (UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:])
+    }
+
+    static func set(_ name: String, for email: String) {
+        var names = all()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        names[email] = trimmed.isEmpty ? nil : trimmed
+        UserDefaults.standard.set(names, forKey: key)
+    }
+}
+
+func displayName(_ email: String) -> String { Nicknames.all()[email] ?? email }
+
+func parseDate(_ s: String) -> Date? {
+    let f = ISO8601DateFormatter()
+    if let d = f.date(from: s) { return d }
+    f.formatOptions.insert(.withFractionalSeconds)
+    return f.date(from: s)
+}
+
+func relative(_ d: Date) -> String { RelativeDateTimeFormatter().localizedString(for: d, relativeTo: Date()) }
+
+struct AllHigh {
+    let resetAt: Date?
+    let account: String?
+}
+
+/// Non-nil when every usable account is at or past `threshold` on its 5-hour or weekly window.
+/// `resetAt` is the soonest moment one of them drops back under it.
+func allAccountsHigh(_ accounts: [Account], threshold: Int) -> AllHigh? {
+    let usable = accounts.filter { !$0.needsSignIn && !($0.disabled ?? false) }
+    guard !usable.isEmpty else { return nil }
+    var soonest: (date: Date, email: String)?
+    for a in usable {
+        let windows = [a.shownUsage?.fiveHour, a.shownUsage?.sevenDay].compactMap { $0 }
+        let hot = windows.filter { $0.pct >= Double(threshold) }
+        if hot.isEmpty { return nil }
+        // Usable again only once every window over the line has reset.
+        if let back = hot.compactMap({ $0.resetsAt.flatMap(parseDate) }).max(), back < (soonest?.date ?? .distantFuture) {
+            soonest = (back, a.email)
+        }
+    }
+    return AllHigh(resetAt: soonest?.date, account: soonest.map { displayName($0.email) })
+}
 
 // MARK: - Shell
 
@@ -43,8 +105,8 @@ enum Shell {
 
     /// Runs `cmd`; stdout is returned, stderr goes to the log. `input` is fed to stdin.
     @discardableResult
-    static func run(_ cmd: String, input: String = "") async -> (code: Int32, out: String) {
-        log("$ \(cmd)")
+    static func run(_ cmd: String, input: String = "", quiet: Bool = false) async -> (code: Int32, out: String) {
+        if !quiet { log("$ \(cmd)") }
         return await withCheckedContinuation { cont in
             DispatchQueue.global().async {
                 let p = process(cmd)
@@ -106,6 +168,15 @@ struct AuthStatus: Decodable {
     let email: String?
 }
 
+struct ConfigValue: Decodable {
+    let value: Double?
+    let isSet: Bool?
+}
+
+struct Release: Decodable {
+    let tag_name: String
+}
+
 // MARK: - Model
 
 final class SignInSession: Identifiable {
@@ -134,7 +205,16 @@ final class Model: ObservableObject {
     @Published var busy = false
     @Published var error: String?
     @Published var signIn: SignInSession?
+    @Published var threshold = defaultThreshold
+    @Published var nicknames = Nicknames.all()
+    @Published var latestVersion: String?
+    @Published var updating = false
+    @Published var renaming: Account?
     private var checkedUpgrade = false
+    private var lastUpdateCheck = Date.distantPast
+
+    func name(_ a: Account) -> String { nicknames[a.email] ?? a.email }
+    var allHigh: AllHigh? { allAccountsHigh(accounts, threshold: threshold) }
 
     var unsavedSignedIn: String? {
         guard let e = signedInEmail, !accounts.contains(where: { $0.email == e }) else { return nil }
@@ -150,6 +230,12 @@ final class Model: ObservableObject {
             // Installs older than the menu bar service can't run this app's toggles.
             progress = "Updating claude-swap…"
             await Shell.run("cswap menubar --help 2>&1 | grep -q install-service || uv tool install --upgrade 'claude-swap[menubar]'")
+            await applyThreshold()
+            await prepareAuto()
+        }
+        if Date().timeIntervalSince(lastUpdateCheck) > updateCheckSeconds {
+            lastUpdateCheck = Date()
+            Task { await checkForUpdate() }
         }
         let list = await Shell.run("cswap list --json")
         if let parsed = try? JSONDecoder().decode(AccountList.self, from: Data(list.out.utf8)) {
@@ -168,6 +254,7 @@ final class Model: ObservableObject {
     /// Sample data for README screenshots: `CAS_DEMO=1` (accounts) or `CAS_DEMO=setup` (welcome).
     private func loadDemo() {
         if ProcessInfo.processInfo.environment["CAS_DEMO"] == "setup" { phase = .needsSetup; return }
+        if ProcessInfo.processInfo.environment["CAS_DEMO"] == "update" { latestVersion = "2.0" }
         func w(_ pct: Double, hours: Double) -> UsageWindow {
             UsageWindow(pct: pct, resetsAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(hours * 3600)))
         }
@@ -176,9 +263,10 @@ final class Model: ObservableObject {
                     usage: status == "ok" ? Usage(fiveHour: w(five, hours: 2.4), sevenDay: w(week, hours: 75)) : nil,
                     lastGoodUsage: nil, disabled: nil)
         }
+        let high = ProcessInfo.processInfo.environment["CAS_DEMO"] == "high"
         accounts = [
-            a(1, "sam@studio.co", active: true, 38, 52),
-            a(2, "sam.personal@gmail.com", active: false, 6, 21),
+            a(1, "sam@studio.co", active: true, high ? 88 : 38, 52),
+            a(2, "sam.personal@gmail.com", active: false, high ? 91 : 6, high ? 86 : 21),
             a(3, "sam@sidegig.dev", active: false, 92, 71),
         ]
         autoOn = true
@@ -204,7 +292,7 @@ final class Model: ObservableObject {
             return installFailed()
         }
         progress = "Turning on auto-switching…"
-        await Shell.run("cswap config set autoswitch.threshold \(threshold)")
+        await applyThreshold()
         await setAuto(true)
         await setMenubar(true)
         await refresh()
@@ -271,20 +359,56 @@ final class Model: ObservableObject {
         }
     }
 
+    /// cswap's own default is 90%; the app's is `defaultThreshold`. Keep a value the person picked,
+    /// otherwise set ours (installs that skipped setup never had it set).
+    func applyThreshold() async {
+        let r = await Shell.run("cswap config get autoswitch.threshold --json")
+        let current = try? JSONDecoder().decode(ConfigValue.self, from: Data(r.out.utf8))
+        if current?.isSet == true, let v = current?.value {
+            threshold = Int(v)
+        } else {
+            await setThreshold(defaultThreshold)
+        }
+    }
+
+    func setThreshold(_ pct: Int) async {
+        threshold = pct
+        await Shell.run("cswap config set autoswitch.threshold \(pct)")
+        // cswap auto reads settings at start; restart it so the new value applies now.
+        if FileManager.default.fileExists(atPath: autoPlist) {
+            await Shell.run("launchctl kickstart -k gui/\(getuid())/\(autoLabel)")
+        }
+    }
+
+    /// Turns auto-switching on the first time for installs that never went through setup, and
+    /// points older LaunchAgents (bare `cswap auto`) at this app's notifying watcher.
+    private func prepareAuto() async {
+        let d = UserDefaults.standard
+        let installed = FileManager.default.fileExists(atPath: autoPlist)
+        if !d.bool(forKey: autoDefaultedKey) {
+            if !installed { return await setAuto(true) }
+            d.set(true, forKey: autoDefaultedKey)
+        }
+        let plist = NSDictionary(contentsOfFile: autoPlist)
+        let program = (plist?["ProgramArguments"] as? [String])?.first
+        if installed, program != Bundle.main.executablePath { await setAuto(true) }
+    }
+
     func setAuto(_ on: Bool) async {
+        UserDefaults.standard.set(true, forKey: autoDefaultedKey)
         let uid = getuid()
         await Shell.run("launchctl bootout gui/\(uid)/\(autoLabel)")
         if on {
-            let cswap = (await Shell.run("command -v cswap")).out.trimmingCharacters(in: .whitespacesAndNewlines)
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
             let plist: [String: Any] = [
                 "Label": autoLabel,
-                "ProgramArguments": [cswap, "auto"],
+                "ProgramArguments": [Bundle.main.executablePath ?? "", "--watch"],
                 "EnvironmentVariables": ["PATH": shellPath],
                 "RunAtLoad": true,
                 "KeepAlive": true,
                 "ThrottleInterval": 60,
-                "StandardOutPath": "\(home)/Library/Logs/claude-swap-auto.log",
-                "StandardErrorPath": "\(home)/Library/Logs/claude-swap-auto.log",
+                "StandardOutPath": logPath,
+                "StandardErrorPath": logPath,
             ]
             try? FileManager.default.createDirectory(atPath: "\(home)/Library/LaunchAgents", withIntermediateDirectories: true)
             let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
@@ -296,6 +420,45 @@ final class Model: ObservableObject {
             try? FileManager.default.removeItem(atPath: autoPlist)
         }
         autoOn = FileManager.default.fileExists(atPath: autoPlist)
+    }
+
+    func setNickname(_ name: String, for a: Account) {
+        Nicknames.set(name, for: a.email)
+        nicknames = Nicknames.all()
+    }
+
+    func checkForUpdate() async {
+        guard !isDemo, let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest"),
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              let release = try? JSONDecoder().decode(Release.self, from: data) else { return }
+        let v = release.tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+        latestVersion = v.compare(appVersion, options: .numeric) == .orderedDescending ? v : nil
+    }
+
+    /// Updates the way it was installed, then reopens. Runs detached: the update quits this app.
+    func installUpdate() {
+        updating = true
+        error = nil
+        let app = Bundle.main.bundlePath
+        let viaBrew = ["/opt/homebrew/Caskroom/claudeswap", "/usr/local/Caskroom/claudeswap"]
+            .contains { FileManager.default.fileExists(atPath: $0) }
+        let cmd = viaBrew
+            ? "brew upgrade --cask claudeswap && open '\(app)'"
+            : "curl -fsSL https://raw.githubusercontent.com/\(repo)/main/install.sh | bash"
+        Shell.log("$ \(cmd)")
+        let p = Shell.process(cmd)
+        p.standardOutput = Shell.logHandle()
+        p.standardError = Shell.logHandle()
+        p.terminationHandler = { proc in
+            Task { @MainActor in
+                self.updating = false
+                if proc.terminationStatus != 0 { self.error = "Update didn't finish. See the log." }
+            }
+        }
+        do { try p.run() } catch {
+            updating = false
+            self.error = "Couldn't start the update."
+        }
     }
 
     func setMenubar(_ on: Bool) async {
@@ -318,6 +481,13 @@ struct ContentView: View {
     @EnvironmentObject var model: Model
     @Environment(\.controlActiveState) private var controlActiveState
 
+    /// Fits the account list; each notice above it (update, all high, unsaved login) adds a row.
+    private var windowHeight: CGFloat {
+        guard model.phase == .ready else { return baseHeight }
+        let notices = [model.latestVersion != nil, model.allHigh != nil, model.unsavedSignedIn != nil].filter { $0 }.count
+        return baseHeight + noticeHeight * CGFloat(notices)
+    }
+
     var body: some View {
         Group {
             switch model.phase {
@@ -328,7 +498,7 @@ struct ContentView: View {
             case .ready: ReadyView()
             }
         }
-        .frame(width: 480, height: 510)
+        .frame(width: 480, height: windowHeight)
         // Demo screenshots: render in the active (key-window) style even when focus is elsewhere.
         .environment(\.controlActiveState, isDemo ? .key : controlActiveState)
         .sheet(item: $model.signIn) { _ in SignInSheet() }
@@ -414,9 +584,9 @@ struct SetupView: View {
                 Feature(icon: "person.2.fill", color: .blue, title: "All your subscriptions",
                         text: "Save each Claude account you pay for.")
                 Feature(icon: "arrow.triangle.2.circlepath", color: .orange, title: "Switches on its own",
-                        text: "At \(threshold)% of a limit, Claude moves to the account with the most left.")
+                        text: "At \(model.threshold)% of a limit, Claude moves to the account with the most left.")
                 Feature(icon: "lock.fill", color: .green, title: "Private by design",
-                        text: "Logins stay in your Mac's Keychain. Nothing is sent anywhere.")
+                        text: "Logins stay in your Mac's Keychain, on this Mac only.")
             }
         } footer: {
             ErrorText()
@@ -466,6 +636,7 @@ struct InstallingView: View {
 
 struct ReadyView: View {
     @EnvironmentObject var model: Model
+    @State private var nickname = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -481,6 +652,29 @@ struct ReadyView: View {
             .padding(.top, 6)
 
             Form {
+                if let v = model.latestVersion {
+                    Section {
+                        Banner(icon: "arrow.down.circle.fill", color: .accentColor,
+                               title: "ClaudeSwap \(v) is available",
+                               detail: "You have \(appVersion).") {
+                            if model.updating {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Button("Update") { model.installUpdate() }
+                            }
+                        }
+                    }
+                }
+
+                if let high = model.allHigh {
+                    Section {
+                        Banner(icon: "exclamationmark.triangle.fill", color: .orange,
+                               title: "All accounts are above \(model.threshold)%",
+                               detail: high.resetAt.map { "Usage frees up on \(high.account ?? "an account") \(relative($0))." }
+                                   ?? "Claude keeps using the account with the most left.") { EmptyView() }
+                    }
+                }
+
                 if let email = model.unsavedSignedIn {
                     Section {
                         HStack(spacing: 12) {
@@ -524,8 +718,26 @@ struct ReadyView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 SettingRow(title: "Switch automatically",
-                           detail: "When an account reaches \(threshold)% of its 5-hour or weekly limit.",
+                           detail: "Move to the account with the most usage left.",
                            isOn: Binding(get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } }))
+                if model.autoOn {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Switch at")
+                            Text("Of an account's 5-hour or weekly limit.").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("Switch at", selection: Binding(get: { model.threshold },
+                                                               set: { v in Task { await model.setThreshold(v) } })) {
+                            ForEach(Array(Set(thresholdChoices + [model.threshold])).sorted(), id: \.self) {
+                                Text("\($0)%").tag($0)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .controlSize(.small)
+                    }
+                }
                 SettingRow(title: "Show in menu bar",
                            detail: "See usage and switch accounts from the top of your screen.",
                            isOn: Binding(get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } }))
@@ -539,6 +751,36 @@ struct ReadyView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+        }
+        .alert("Rename Account", isPresented: Binding(get: { model.renaming != nil },
+                                                      set: { if !$0 { model.renaming = nil } })) {
+            TextField("Name", text: $nickname)
+            Button("Save") { if let a = model.renaming { model.setNickname(nickname, for: a) } }
+                .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Shown instead of \(model.renaming?.email ?? "the email"). Leave empty to show the email.")
+        }
+        .onChange(of: model.renaming?.email) { email in
+            nickname = email.flatMap { model.nicknames[$0] } ?? ""
+        }
+    }
+}
+
+/// A one-line notice row: tinted icon, title and detail, optional trailing control.
+struct Banner<Trailing: View>: View {
+    let icon: String, color: Color, title: String, detail: String
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.title2).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            trailing
         }
     }
 }
@@ -560,15 +802,16 @@ struct SettingRow: View {
 }
 
 struct Avatar: View {
-    let email: String
+    let name: String
+    let seed: String
     private static let palette: [Color] = [.blue, .purple, .pink, .orange, .teal, .indigo, .mint]
 
     var body: some View {
-        let color = Self.palette[email.unicodeScalars.reduce(0) { $0 + Int($1.value) } % Self.palette.count]
+        let color = Self.palette[seed.unicodeScalars.reduce(0) { $0 + Int($1.value) } % Self.palette.count]
         Circle()
             .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .top, endPoint: .bottom))
             .overlay(
-                Text(email.prefix(1).uppercased())
+                Text(name.prefix(1).uppercased())
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
             )
@@ -584,10 +827,18 @@ struct AccountRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Avatar(email: account.email)
+            Avatar(name: model.name(account), seed: account.email)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text(account.email).lineLimit(1).truncationMode(.middle)
+                    Text(model.name(account)).lineLimit(1).truncationMode(.middle)
+                        .layoutPriority(1)
+                    if model.nicknames[account.email] != nil {
+                        Text(account.email)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                     if account.isActive {
                         Text("In Use")
                             .font(.caption2.weight(.semibold))
@@ -603,8 +854,8 @@ struct AccountRow: View {
                         .foregroundStyle(.orange)
                 } else if let u = account.shownUsage {
                     HStack(spacing: 14) {
-                        Meter(label: "5h", window: u.fiveHour)
-                        Meter(label: "Week", window: u.sevenDay)
+                        Meter(label: "5h", window: u.fiveHour, threshold: model.threshold)
+                        Meter(label: "Week", window: u.sevenDay, threshold: model.threshold)
                     }
                 } else {
                     Text("Usage not available yet").font(.caption).foregroundStyle(.secondary)
@@ -621,11 +872,25 @@ struct AccountRow: View {
                 }
             }
             .controlSize(.small)
+            Menu {
+                actions
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .help("More")
         }
         .padding(.vertical, 3)
-        .contextMenu {
-            Button("Remove Account", role: .destructive) { Task { await model.remove(account) } }
-        }
+        .contextMenu { actions }
+    }
+
+    @ViewBuilder private var actions: some View {
+        Button("Rename…") { model.renaming = account }
+        Divider()
+        Button("Remove Account", role: .destructive) { Task { await model.remove(account) } }
     }
 }
 
@@ -641,6 +906,7 @@ extension Color {
 struct Meter: View {
     let label: String
     let window: UsageWindow?
+    let threshold: Int
 
     private var pct: Double { window?.pct ?? 0 }
     private var color: Color { pct < 60 ? .green : pct < Double(threshold) ? .orange : .red }
@@ -708,6 +974,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
+enum Entry {
+    static func main() {
+        if CommandLine.arguments.contains("--watch") { Watcher.run() } else { SwitcherApp.main() }
+    }
+}
+
 struct SwitcherApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var model = Model()

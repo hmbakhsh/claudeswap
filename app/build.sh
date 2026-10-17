@@ -12,7 +12,7 @@ trap 'rm -rf "$TMP"' EXIT
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 for arch in arm64 x86_64; do
-  swiftc -parse-as-library -O -swift-version 5 -target "$arch-apple-macos13.0" Switcher.swift -o "$TMP/switcher-$arch"
+  swiftc -parse-as-library -O -swift-version 5 -target "$arch-apple-macos13.0" Switcher.swift Watcher.swift -o "$TMP/switcher-$arch"
 done
 lipo -create "$TMP"/switcher-* -output "$APP/Contents/MacOS/switcher"
 
