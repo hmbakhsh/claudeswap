@@ -5,13 +5,13 @@
   <img src="docs/screenshot.png" width="400" alt="Accounts screen with 5-hour and weekly usage for three accounts">
 </p>
 
-Got more than one Claude subscription? This Mac app keeps Claude Code and T3 Code on whichever account has the most usage left. Before one runs out, it switches to another on its own.
+Got more than one Claude subscription? This Mac app keeps Claude Code on whichever account has the most usage left. Before one runs out, it switches to another on its own.
 
 ## Install (1 minute)
 
 ### Easiest: let Claude Code do it
 
-Copy this prompt and paste it into Claude Code (or T3 Code):
+Copy this prompt and paste it into Claude Code:
 
 ```text
 Install Claude Account Switcher for me (https://github.com/hmbakhsh/claude-account-switcher) on this Mac.
