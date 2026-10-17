@@ -1,0 +1,16 @@
+# Push a tag like v1.1 to build the app and publish it as the latest release.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: VERSION="${GITHUB_REF_NAME#v}" ./app/build.sh
+      - run: gh release create "$GITHUB_REF_NAME" dist/Claude-Account-Switcher.zip --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
