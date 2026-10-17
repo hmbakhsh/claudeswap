@@ -6,20 +6,10 @@ let out = CommandLine.arguments[1]
 let image = NSImage(size: NSSize(width: size, height: size))
 image.lockFocus()
 
-// Tile on Apple's macOS icon grid (824px body, ~185px corner radius) with a soft drop shadow.
+// Tile on Apple's macOS icon grid (824px body, ~185px corner radius).
 let inset: CGFloat = 100
 let tile = NSRect(x: inset, y: inset, width: size - 2 * inset, height: size - 2 * inset)
 let tilePath = NSBezierPath(roundedRect: tile, xRadius: 185, yRadius: 185)
-
-NSGraphicsContext.saveGraphicsState()
-let tileShadow = NSShadow()
-tileShadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
-tileShadow.shadowBlurRadius = 28
-tileShadow.shadowOffset = NSSize(width: 0, height: -12)
-tileShadow.set()
-NSColor.black.setFill()
-tilePath.fill()
-NSGraphicsContext.restoreGraphicsState()
 
 NSGradient(colors: [
     NSColor(red: 0.97, green: 0.56, blue: 0.36, alpha: 1),
