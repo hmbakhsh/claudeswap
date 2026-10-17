@@ -1,4 +1,4 @@
-// Claude Account Switcher — a small native window over claude-swap (cswap).
+// ClaudeSwap — a small native window over claude-swap (cswap).
 // Lists accounts with live usage, adds accounts via browser sign-in, and turns
 // auto-switching / the cswap menu bar icon on and off. All real work is cswap.
 import AppKit
@@ -10,7 +10,7 @@ let shellPath = "\(home)/.local/bin:\(home)/.claude/local:/opt/homebrew/bin:/usr
 let autoLabel = "dev.claude-swap.auto"
 let autoPlist = "\(home)/Library/LaunchAgents/\(autoLabel).plist"
 let menubarPlist = "\(home)/Library/LaunchAgents/com.cswap.menubar.plist"
-let logPath = "\(home)/Library/Logs/claude-account-switcher.log"
+let logPath = "\(home)/Library/Logs/claudeswap.log"
 let threshold = 85
 let refreshSeconds: UInt64 = 60
 let isDemo = ProcessInfo.processInfo.environment["CAS_DEMO"] != nil
@@ -391,7 +391,7 @@ struct NeedsClaudeView: View {
     @EnvironmentObject var model: Model
     var body: some View {
         Onboarding(title: "Install Claude Code First") {
-            Text("Claude Account Switcher works with Claude Code. Install it, then come back here.")
+            Text("ClaudeSwap works with Claude Code. Install it, then come back here.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         } footer: {
@@ -409,7 +409,7 @@ struct NeedsClaudeView: View {
 struct SetupView: View {
     @EnvironmentObject var model: Model
     var body: some View {
-        Onboarding(title: "Welcome to\nClaude Account Switcher") {
+        Onboarding(title: "Welcome to ClaudeSwap") {
             VStack(alignment: .leading, spacing: 22) {
                 Feature(icon: "person.2.fill", color: .blue, title: "All your subscriptions",
                         text: "Save each Claude account you pay for.")
@@ -471,7 +471,7 @@ struct ReadyView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 AppIcon(size: 40)
-                Text("Claude Account Switcher").font(.title3.weight(.semibold))
+                Text("ClaudeSwap").font(.title3.weight(.semibold))
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
             }
@@ -704,7 +704,7 @@ struct SwitcherApp: App {
     @StateObject private var model = Model()
 
     var body: some Scene {
-        Window("Claude Account Switcher", id: "main") {
+        Window("ClaudeSwap", id: "main") {
             ContentView().environmentObject(model)
         }
         .windowStyle(.hiddenTitleBar)

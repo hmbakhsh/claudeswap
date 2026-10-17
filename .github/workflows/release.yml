@@ -11,6 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: VERSION="${GITHUB_REF_NAME#v}" ./app/build.sh
-      - run: gh release create "$GITHUB_REF_NAME" dist/Claude-Account-Switcher.zip --generate-notes
+      - run: gh release create "$GITHUB_REF_NAME" dist/ClaudeSwap.zip --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

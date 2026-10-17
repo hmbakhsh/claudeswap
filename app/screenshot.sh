@@ -4,7 +4,7 @@
 #   app/screenshot.sh setup docs/welcome.png
 set -euo pipefail
 cd "$(dirname "$0")/.."
-APP="$PWD/dist/Claude Account Switcher.app"
+APP="$PWD/dist/ClaudeSwap.app"
 [[ -d "$APP" ]] || ./app/build.sh
 MODE="${1:-1}"
 OUT="${2:-docs/screenshot.png}"

@@ -1,11 +1,11 @@
 #!/bin/bash
-# Builds "Claude Account Switcher.app" (universal) and a shareable zip in ../dist/.
+# Builds "ClaudeSwap.app" (universal) and a shareable zip in ../dist/.
 set -euo pipefail
 cd "$(dirname "$0")"
-NAME="Claude Account Switcher"
+NAME="ClaudeSwap"
 OUT="../dist"
 APP="$OUT/$NAME.app"
-ZIP="Claude-Account-Switcher.zip"
+ZIP="ClaudeSwap.zip"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

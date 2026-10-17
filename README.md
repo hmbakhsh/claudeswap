@@ -1,4 +1,4 @@
-# Claude Account Switcher
+# ClaudeSwap
 
 <p align="center">
   <img src="docs/welcome.png" width="400" alt="Welcome screen">
@@ -14,11 +14,11 @@ Got more than one Claude subscription? This Mac app keeps Claude Code on whichev
 Copy this prompt and paste it into Claude Code:
 
 ```text
-Install Claude Account Switcher for me (https://github.com/hmbakhsh/claude-account-switcher) on this Mac.
+Install ClaudeSwap for me (https://github.com/hmbakhsh/claudeswap) on this Mac.
 
-1. If Homebrew is installed, run: brew install --cask hmbakhsh/tap/claude-account-switcher
-   If it isn't, run: curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claude-account-switcher/main/install.sh | bash
-2. Open it: open "/Applications/Claude Account Switcher.app"
+1. If Homebrew is installed, run: brew install --cask hmbakhsh/tap/claudeswap
+   If it isn't, run: curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claudeswap/main/install.sh | bash
+2. Open it: open "/Applications/ClaudeSwap.app"
 3. Tell me in plain words what to do next in the app window: click Continue, then click
    "Add Account…" once for each Claude subscription I have and sign in with that account in the browser.
 
@@ -30,28 +30,28 @@ Don't read, copy or change any Claude credentials or Keychain entries yourself. 
 Open the **Terminal** app (press ⌘ Space and type "Terminal"), paste this line, then press Enter:
 
 ```bash
-brew install --cask hmbakhsh/tap/claude-account-switcher
+brew install --cask hmbakhsh/tap/claudeswap
 ```
 
-Then open **Claude Account Switcher** from your Applications folder. Click **Continue**, then **Add Account…** once for each Claude subscription you have.
+Then open **ClaudeSwap** from your Applications folder. Click **Continue**, then **Add Account…** once for each Claude subscription you have.
 
-To update: `brew upgrade --cask claude-account-switcher`
+To update: `brew upgrade --cask claudeswap`
 
 No Homebrew? Use this line instead. Run it again any time to update:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claude-account-switcher/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hmbakhsh/claudeswap/main/install.sh | bash
 ```
 
 <details><summary>Rather not use Terminal?</summary>
 
-Download **Claude-Account-Switcher.zip** from the [latest release](https://github.com/hmbakhsh/claude-account-switcher/releases/latest), unzip it, and drag the app into **Applications**. The first time you open it, macOS will block it. Go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+Download **ClaudeSwap.zip** from the [latest release](https://github.com/hmbakhsh/claudeswap/releases/latest), unzip it, and drag the app into **Applications**. The first time you open it, macOS will block it. Go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
 </details>
 
 ## Later
 
 - **Add an account:** open the app and click **Add Account…**.
-- **Uninstall:** `brew uninstall --zap --cask claude-account-switcher`. This also stops auto-switching and removes the menu bar icon.
+- **Uninstall:** `brew uninstall --zap --cask claudeswap`. This also stops auto-switching and removes the menu bar icon.
 - **Switch now:** click the menu bar icon and pick an account.
 - It keeps running after you restart your Mac.
 
@@ -61,7 +61,7 @@ Download **Claude-Account-Switcher.zip** from the [latest release](https://githu
 - Claude sessions that are already open move to the new account within about 30 seconds.
 - Your logins stay in your Mac's Keychain. Nothing is sent anywhere.
 - Only add accounts that belong to you.
-- Something not working? Send the file `~/Library/Logs/claude-account-switcher.log` to whoever shared the app.
+- Something not working? Send the file `~/Library/Logs/claudeswap.log` to whoever shared the app.
 
 ---
 
