@@ -41,10 +41,10 @@ edge.stroke()
 // Two arcs around the centre, each ending in a rounded arrowhead pointing clockwise.
 let center = NSPoint(x: size / 2, y: size / 2)
 let radius: CGFloat = 218
-let stroke: CGFloat = 98
+let stroke: CGFloat = 84
 let gap: CGFloat = 22           // degrees left open either side of each arrowhead
-let headLength: CGFloat = 138
-let headHalfWidth: CGFloat = 100
+let headLength: CGFloat = 128
+let headHalfWidth: CGFloat = 92
 let headLean: CGFloat = 14       // degrees
 
 func point(_ deg: CGFloat, _ r: CGFloat = radius) -> NSPoint {
@@ -52,14 +52,9 @@ func point(_ deg: CGFloat, _ r: CGFloat = radius) -> NSPoint {
     return NSPoint(x: center.x + r * cos(a), y: center.y + r * sin(a))
 }
 
-let glyphShadow = NSShadow()
-glyphShadow.shadowColor = NSColor(red: 0.35, green: 0.10, blue: 0.04, alpha: 0.35)
-glyphShadow.shadowBlurRadius = 18
-glyphShadow.shadowOffset = NSSize(width: 0, height: -8)
 let ctx = NSGraphicsContext.current!.cgContext
 NSGraphicsContext.saveGraphicsState()
-glyphShadow.set()
-ctx.beginTransparencyLayer(auxiliaryInfo: nil)  // shadow the arrows as one shape
+ctx.beginTransparencyLayer(auxiliaryInfo: nil)
 NSColor.white.set()
 for (start, end) in [(180 - gap, gap + 14), (360 - gap, 180 + gap + 14)] {
     let arc = NSBezierPath()
