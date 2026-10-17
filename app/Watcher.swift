@@ -42,7 +42,7 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
 
         // `switcher --watch --test-notify`: check notifications work on this Mac, then quit.
         if CommandLine.arguments.contains("--test-notify") {
-            notify("ClaudeSwap notifications are on", "You'll hear from it when it switches accounts.")
+            notify("ClaudeSwap notifications are on", "You'll hear from it when it switches accounts")
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(0) }
             return
         }
@@ -109,17 +109,17 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
             let to = ((e["to"] as? [String: Any])?["email"] as? String).map(displayName) ?? "another account"
             let why: String
             switch (e["trigger"] as? String, from) {
-            case ("proactive", let f?): why = "\(f) reached \(Int(threshold))% of its limit."
-            case ("at-limit", let f?): why = "\(f) hit its usage limit."
-            case ("failover", let f?): why = "\(f) stopped working."
-            default: why = "It has the most usage left."
+            case ("proactive", let f?): why = "\(f) reached \(Int(threshold))% of its limit"
+            case ("at-limit", let f?): why = "\(f) hit its usage limit"
+            case ("failover", let f?): why = "\(f) stopped working"
+            default: why = "It has the most usage left"
             }
             notify("Switched to \(to)", why)
         case "all-exhausted" where !exhaustedNotified:
             exhaustedNotified = true
             allHighNotified = true
-            let back = (e["earliestResetAt"] as? String).flatMap(parseDate).map { "Usage comes back \(relative($0))." }
-            notify("All accounts are out of usage", back ?? "Usage comes back when a limit resets.")
+            let back = (e["earliestResetAt"] as? String).flatMap(parseDate).map { "Usage comes back \(relative($0))" }
+            notify("All accounts are out of usage", back ?? "Usage comes back when a limit resets")
         default:
             break
         }
@@ -128,8 +128,8 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     private func notifyAllHigh() async {
         let accounts = await loadAccounts()
         let high = allAccountsHigh(accounts, threshold: Int(threshold))
-        let body = high?.resetAt.map { d in "Usage frees up on \(high?.account ?? "an account") \(relative(d))." }
-        notify("All accounts are above \(Int(threshold))%", body ?? "Claude will keep using the account with the most left.")
+        let body = high?.resetAt.map { d in "Usage frees up on \(high?.account ?? "an account") \(relative(d))" }
+        notify("All accounts are above \(Int(threshold))%", body ?? "Claude will keep using the account with the most left")
     }
 
     /// Notifies once per account when its saved login stops working, and again only after it's fixed and breaks again.
@@ -139,7 +139,7 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         let d = UserDefaults.standard
         var notified = Set(d.stringArray(forKey: signInNotifiedKey) ?? [])
         for a in accounts where a.needsSignIn && !notified.contains(a.email) {
-            notify("\(displayName(a.email)) needs signing in again", "Open ClaudeSwap and click Sign In… to keep using it.")
+            notify("\(displayName(a.email)) needs signing in again", "Open ClaudeSwap and click Sign In… to keep using it")
             notified.insert(a.email)
         }
         notified = notified.filter { email in accounts.contains { $0.email == email && $0.needsSignIn } }

@@ -240,7 +240,7 @@ final class Model: ObservableObject {
         if let parsed = try? JSONDecoder().decode(AccountList.self, from: Data(list.out.utf8)) {
             accounts = parsed.accounts
         } else {
-            error = "Couldn't read your accounts. Try Refresh."
+            error = "Couldn't read your accounts. Try Refresh"
         }
         let auth = await Shell.run("claude auth status --json")
         let status = try? JSONDecoder().decode(AuthStatus.self, from: Data(auth.out.utf8))
@@ -299,7 +299,7 @@ final class Model: ObservableObject {
 
     private func installFailed() {
         phase = .needsSetup
-        error = "Setup didn't finish. Check your internet and try again."
+        error = "Setup didn't finish. Check your internet and try again"
     }
 
     // Each step is a cswap command; "y" answers any overwrite confirmation.
@@ -313,11 +313,11 @@ final class Model: ObservableObject {
 
     func saveSignedIn(slot: Int? = nil) async {
         let cmd = slot.map { "cswap add --slot \($0)" } ?? "cswap add"
-        await act(cmd, failure: "Couldn't save that account.")
+        await act(cmd, failure: "Couldn't save that account")
     }
 
-    func use(_ a: Account) async { await act("cswap switch \(a.number)", failure: "Couldn't switch to \(a.email).") }
-    func remove(_ a: Account) async { await act("cswap remove \(a.number)", failure: "Couldn't remove \(a.email).") }
+    func use(_ a: Account) async { await act("cswap switch \(a.number)", failure: "Couldn't switch to \(a.email)") }
+    func remove(_ a: Account) async { await act("cswap remove \(a.number)", failure: "Couldn't remove \(a.email)") }
 
     func startSignIn(slot: Int? = nil) {
         error = nil
@@ -334,7 +334,7 @@ final class Model: ObservableObject {
             try p.run()
             signIn = session
         } catch {
-            self.error = "Couldn't start sign-in."
+            self.error = "Couldn't start sign-in"
         }
     }
 
@@ -354,7 +354,7 @@ final class Model: ObservableObject {
         if code == 0 {
             await saveSignedIn(slot: s.slot)
         } else {
-            error = "Sign-in didn't finish. Try again."
+            error = "Sign-in didn't finish. Try again"
         }
     }
 
@@ -418,7 +418,7 @@ final class Model: ObservableObject {
             let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
             FileManager.default.createFile(atPath: autoPlist, contents: data)
             if await Shell.run("launchctl bootstrap gui/\(uid) '\(autoPlist)'").code != 0 {
-                error = "Couldn't turn on auto-switching."
+                error = "Couldn't turn on auto-switching"
             }
         } else {
             try? FileManager.default.removeItem(atPath: autoPlist)
@@ -460,12 +460,12 @@ final class Model: ObservableObject {
             Task { @MainActor in
                 // Still running means the update didn't replace us (failed, or brew saw nothing new).
                 self.updating = false
-                self.error = "Update didn't finish. See the log."
+                self.error = "Update didn't finish. See the log"
             }
         }
         do { try p.run() } catch {
             updating = false
-            self.error = "Couldn't start the update."
+            self.error = "Couldn't start the update"
         }
     }
 
@@ -477,7 +477,7 @@ final class Model: ObservableObject {
             ? "uv tool install --upgrade 'claude-swap[menubar]' && cswap menubar --install-service"
             : "cswap menubar --uninstall-service"
         if await Shell.run(cmd).code != 0 {
-            error = "Couldn't change the menu bar icon."
+            error = "Couldn't change the menu bar icon"
         }
         menubarOn = FileManager.default.fileExists(atPath: menubarPlist)
     }
@@ -569,7 +569,7 @@ struct NeedsClaudeView: View {
     @EnvironmentObject var model: Model
     var body: some View {
         Onboarding(title: "Install Claude Code First") {
-            Text("ClaudeSwap works with Claude Code. Install it, then come back here.")
+            Text("ClaudeSwap works with Claude Code. Install it, then come back here")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         } footer: {
@@ -590,11 +590,11 @@ struct SetupView: View {
         Onboarding(title: "Welcome to ClaudeSwap") {
             VStack(alignment: .leading, spacing: 22) {
                 Feature(icon: "person.2.fill", color: .blue, title: "All your subscriptions",
-                        text: "Save each Claude account you pay for.")
+                        text: "Save each Claude account you pay for")
                 Feature(icon: "arrow.triangle.2.circlepath", color: .orange, title: "Switches on its own",
-                        text: "At \(model.threshold)% of a limit, Claude moves to the account with the most left.")
+                        text: "At \(model.threshold)% of a limit, Claude moves to the account with the most left")
                 Feature(icon: "lock.fill", color: .green, title: "Private by design",
-                        text: "Logins stay in your Mac's Keychain, on this Mac only.")
+                        text: "Logins stay in your Mac's Keychain, on this Mac only")
             }
         } footer: {
             ErrorText()
@@ -604,7 +604,7 @@ struct SetupView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
-            Text("Setup takes about a minute.").font(.caption).foregroundStyle(.secondary)
+            Text("Setup takes about a minute").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -637,7 +637,7 @@ struct InstallingView: View {
                 Text(model.progress).foregroundStyle(.secondary)
             }
         } footer: {
-            Text("This takes about a minute.").font(.caption).foregroundStyle(.secondary)
+            Text("This takes about a minute").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -664,7 +664,7 @@ struct ReadyView: View {
                     Section {
                         Banner(icon: "arrow.down.circle.fill", color: .accentColor,
                                title: "ClaudeSwap \(v) is available",
-                               detail: "You have \(appVersion).") {
+                               detail: "You have \(appVersion)") {
                             if model.updating {
                                 ProgressView().controlSize(.small)
                             } else {
@@ -678,8 +678,8 @@ struct ReadyView: View {
                     Section {
                         Banner(icon: "exclamationmark.triangle.fill", color: .orange,
                                title: "All accounts are above \(model.threshold)%",
-                               detail: high.resetAt.map { "Usage frees up on \(high.account ?? "an account") \(relative($0))." }
-                                   ?? "Claude keeps using the account with the most left.") { EmptyView() }
+                               detail: high.resetAt.map { "Usage frees up on \(high.account ?? "an account") \(relative($0))" }
+                                   ?? "Claude keeps using the account with the most left") { EmptyView() }
                     }
                 }
 
@@ -691,7 +691,7 @@ struct ReadyView: View {
                                 .foregroundStyle(Color.accentColor)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(email).lineLimit(1).truncationMode(.middle)
-                                Text("You're signed in to Claude with this account.")
+                                Text("You're signed in to Claude with this account")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -726,13 +726,13 @@ struct ReadyView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 SettingRow(title: "Switch automatically",
-                           detail: "Move to the account with the most usage left.",
+                           detail: "Move to the account with the most usage left",
                            isOn: Binding(get: { model.autoOn }, set: { v in Task { await model.setAuto(v) } }))
                 if model.autoOn {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Switch at")
-                            Text("Of an account's 5-hour or weekly limit.").font(.caption).foregroundStyle(.secondary)
+                            Text("Of an account's 5-hour or weekly limit").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Picker("Switch at", selection: Binding(get: { model.threshold },
@@ -747,7 +747,7 @@ struct ReadyView: View {
                     }
                 }
                 SettingRow(title: "Show in menu bar",
-                           detail: "See usage and switch accounts from the top of your screen.",
+                           detail: "See usage and switch accounts from the top of your screen",
                            isOn: Binding(get: { model.menubarOn }, set: { v in Task { await model.setMenubar(v) } }))
                 HStack {
                     ErrorText()
@@ -767,7 +767,7 @@ struct ReadyView: View {
                 .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Shown instead of \(model.renaming?.email ?? "the email"). Leave empty to show the email.")
+            Text("Shown instead of \(model.renaming?.email ?? "the email"). Leave empty to show the email")
         }
         .onChange(of: model.renaming?.email) { email in
             nickname = email.flatMap { model.nicknames[$0] } ?? ""
@@ -857,7 +857,7 @@ struct AccountRow: View {
                     }
                 }
                 if account.needsSignIn {
-                    Text(canFix ? "Saved login is out of date." : "Signed out.")
+                    Text(canFix ? "Saved login is out of date" : "Signed out")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 } else if let u = account.shownUsage {
@@ -949,7 +949,7 @@ struct SignInSheet: View {
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Sign In to Claude").font(.headline)
-                    Text("Finish signing in with your browser, using the account you want to add.")
+                    Text("Finish signing in with your browser, using the account you want to add")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -960,7 +960,7 @@ struct SignInSheet: View {
                 Text("Waiting for your browser…").font(.callout).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("If the page shows a code, paste it here.").font(.caption).foregroundStyle(.secondary)
+                Text("If the page shows a code, paste it here").font(.caption).foregroundStyle(.secondary)
                 TextField("Code", text: $code).textFieldStyle(.roundedBorder)
             }
             HStack {
