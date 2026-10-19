@@ -56,6 +56,41 @@ func parseDate(_ s: String) -> Date? {
     return f.date(from: s)
 }
 
+/// The main app bundle, also when running as the notifier helper inside it (…/ClaudeSwap.app/Contents/Helpers/…).
+let mainAppPath = Bundle.main.bundlePath.components(separatedBy: "/Contents/Helpers/").first!
+let mainAppID = "dev.claude-swap.switcher"
+
+/// Updates install on their own: the app on open, the notifier every `updateCheckSeconds` in the background.
+enum Updater {
+    /// The newest released version if it's newer than this one. Follows github.com's
+    /// /releases/latest redirect (…/tag/vX.Y); unlike the API it isn't rate-limited.
+    static func newer() async -> String? {
+        guard !isDemo, let url = URL(string: "https://github.com/\(repo)/releases/latest") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let final = response.url, final.path.contains("/tag/") else { return nil }
+        let v = final.lastPathComponent.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+        return v.compare(appVersion, options: .numeric) == .orderedDescending ? v : nil
+    }
+
+    /// Updates the way it was installed. `reopen` quits and reopens the app (brew's cask quits it either way);
+    /// otherwise the zip is swapped in quietly, for the notifier while the app is closed.
+    static func command(reopen: Bool) -> String {
+        let viaBrew = ["/opt/homebrew/Caskroom/claudeswap", "/usr/local/Caskroom/claudeswap"]
+            .contains { FileManager.default.fileExists(atPath: $0) }
+        if viaBrew {
+            return "brew update --quiet && brew upgrade --cask claudeswap" + (reopen ? " && open '\(mainAppPath)'" : "")
+        }
+        if reopen { return "curl -fsSL https://raw.githubusercontent.com/\(repo)/main/install.sh | bash" }
+        return """
+        set -e; T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+        curl -fsSL https://github.com/\(repo)/releases/latest/download/ClaudeSwap.zip -o "$T/app.zip"
+        ditto -x -k "$T/app.zip" "$T" && rm -rf '\(mainAppPath)' && ditto "$T/ClaudeSwap.app" '\(mainAppPath)'
+        """
+    }
+}
+
 func relative(_ d: Date) -> String { RelativeDateTimeFormatter().localizedString(for: d, relativeTo: Date()) }
 
 struct AllHigh {
@@ -225,6 +260,11 @@ final class Model: ObservableObject {
 
     func refresh() async {
         if isDemo { return loadDemo() }
+        // Before the setup checks, so a broken first run can still get the fix.
+        if Date().timeIntervalSince(lastUpdateCheck) > updateCheckSeconds {
+            lastUpdateCheck = Date()
+            Task { await checkForUpdate() }
+        }
         guard await Shell.exists("claude") else { phase = .needsClaude; return }
         guard await Shell.exists("cswap") else { phase = .needsSetup; return }
         if !checkedUpgrade {
@@ -234,10 +274,6 @@ final class Model: ObservableObject {
             await Shell.run("cswap menubar --help 2>&1 | grep -q install-service || \(installCswap)")
             await applyThreshold()
             await prepareAuto()
-        }
-        if Date().timeIntervalSince(lastUpdateCheck) > updateCheckSeconds {
-            lastUpdateCheck = Date()
-            Task { await checkForUpdate() }
         }
         let list = await Shell.run("cswap list --json")
         if let parsed = try? JSONDecoder().decode(AccountList.self, from: Data(list.out.utf8)) {
@@ -451,27 +487,18 @@ final class Model: ObservableObject {
         nicknames = Nicknames.all()
     }
 
-    /// Follows github.com's /releases/latest redirect (…/tag/vX.Y); unlike the API it isn't rate-limited.
+    /// Installs a newer version straight away unless setup or a sign-in is mid-way; the banner's
+    /// Update button stays as the retry if it fails.
     func checkForUpdate() async {
-        guard !isDemo, let url = URL(string: "https://github.com/\(repo)/releases/latest") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        guard let (_, response) = try? await URLSession.shared.data(for: request),
-              let final = response.url, final.path.contains("/tag/") else { return }
-        let v = final.lastPathComponent.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
-        latestVersion = v.compare(appVersion, options: .numeric) == .orderedDescending ? v : nil
+        latestVersion = await Updater.newer()
+        if latestVersion != nil, !updating, !busy, signIn == nil, phase != .installing { installUpdate() }
     }
 
     /// Updates the way it was installed, then reopens. Runs detached: the update quits this app.
     func installUpdate() {
         updating = true
         error = nil
-        let app = Bundle.main.bundlePath
-        let viaBrew = ["/opt/homebrew/Caskroom/claudeswap", "/usr/local/Caskroom/claudeswap"]
-            .contains { FileManager.default.fileExists(atPath: $0) }
-        let cmd = viaBrew
-            ? "brew update --quiet && brew upgrade --cask claudeswap && open '\(app)'"
-            : "curl -fsSL https://raw.githubusercontent.com/\(repo)/main/install.sh | bash"
+        let cmd = Updater.command(reopen: true)
         Shell.log("$ \(cmd)")
         let p = Shell.process(cmd)
         p.standardOutput = Shell.logHandle()
@@ -728,7 +755,7 @@ struct ReadyView: View {
                 if let v = model.latestVersion {
                     Section {
                         Banner(icon: "arrow.down.circle.fill", color: .accentColor,
-                               title: "ClaudeSwap \(v) is available",
+                               title: model.updating ? "Updating to ClaudeSwap \(v)…" : "ClaudeSwap \(v) is available",
                                detail: "You have \(appVersion)") {
                             if model.updating {
                                 ProgressView().controlSize(.small)

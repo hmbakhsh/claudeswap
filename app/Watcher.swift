@@ -24,6 +24,7 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     private var allHighNotified = false
     private var exhaustedNotified = false
     private var timer: Timer?
+    private var updateTimer: Timer?
     private var sigterm: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -50,6 +51,23 @@ final class WatcherDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         Task { await checkSignIns() }
         timer = Timer.scheduledTimer(withTimeInterval: signInCheckSeconds, repeats: true) { [weak self] _ in
             Task { await self?.checkSignIns() }
+        }
+        Task { await update() }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: updateCheckSeconds, repeats: true) { [weak self] _ in
+            Task { await self?.update() }
+        }
+    }
+
+    /// Installs a new version quietly. Skipped while the app is open: it updates itself, and brew would quit it.
+    /// Afterwards we exit and launchd's KeepAlive starts the new notifier.
+    private func update() async {
+        guard let v = await Updater.newer(),
+              NSRunningApplication.runningApplications(withBundleIdentifier: mainAppID).isEmpty else { return }
+        guard await Shell.run(Updater.command(reopen: false)).code == 0 else { return }
+        notify("ClaudeSwap updated to \(v)", "Nothing to do on your end")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.child?.terminate()
+            exit(0)
         }
     }
 

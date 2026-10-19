@@ -56,7 +56,7 @@ Download **ClaudeSwap.zip** from the [latest release](https://github.com/hmbakhs
 - **Add an account:** open the app and click **Add Account…**, or run `open claudeswap://add` in Terminal.
 - **Name an account:** click **⋯** next to it and choose **Rename…** (e.g. "Work", "Personal").
 - **Change when it switches:** pick a percentage next to **Switch at**.
-- **Update:** when a new version is out, the app shows an **Update** button.
+- **Update:** automatic. New versions install on their own (checked every 6 hours).
 - **Uninstall:** `brew uninstall --zap --cask claudeswap`. This also stops auto-switching and removes the menu bar icon.
 - **Switch now:** click the menu bar icon and pick an account.
 - It keeps running after you restart your Mac.
