@@ -19,6 +19,8 @@ let baseHeight: CGFloat = 510
 let noticeHeight: CGFloat = 82
 let updateCheckSeconds: TimeInterval = 6 * 3600
 let repo = "hmbakhsh/claudeswap"
+// claude-swap needs Python 3.12+. Without --python, uv picks macOS's own 3.9 and fails; this makes it fetch 3.12.
+let installCswap = "uv tool install --upgrade --python 3.12 'claude-swap[menubar]'"
 let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 let autoDefaultedKey = "autoSwitchDefaulted"
 let notifierVersionKey = "notifierVersion"
@@ -229,7 +231,7 @@ final class Model: ObservableObject {
             checkedUpgrade = true
             // Installs older than the menu bar service can't run this app's toggles.
             progress = "Updating claude-swap…"
-            await Shell.run("cswap menubar --help 2>&1 | grep -q install-service || uv tool install --upgrade 'claude-swap[menubar]'")
+            await Shell.run("cswap menubar --help 2>&1 | grep -q install-service || \(installCswap)")
             await applyThreshold()
             await prepareAuto()
         }
@@ -267,9 +269,10 @@ final class Model: ObservableObject {
         }
     }
 
-    /// Sample data for README screenshots: `CAS_DEMO=1` (accounts) or `CAS_DEMO=setup` (welcome).
+    /// Sample data for README screenshots: `CAS_DEMO=1` (accounts), `CAS_DEMO=setup` (welcome) or `setup-error`.
     private func loadDemo() {
         if ProcessInfo.processInfo.environment["CAS_DEMO"] == "setup" { phase = .needsSetup; return }
+        if ProcessInfo.processInfo.environment["CAS_DEMO"] == "setup-error" { return installFailed() }
         if ProcessInfo.processInfo.environment["CAS_DEMO"] == "update" { latestVersion = "2.0" }
         func w(_ pct: Double, hours: Double) -> UsageWindow {
             UsageWindow(pct: pct, resetsAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(hours * 3600)))
@@ -304,7 +307,7 @@ final class Model: ObservableObject {
             }
         }
         progress = "Installing claude-swap…"
-        guard await Shell.run("uv tool install --upgrade 'claude-swap[menubar]'").code == 0 else {
+        guard await Shell.run(installCswap).code == 0 else {
             return installFailed()
         }
         progress = "Turning on auto-switching…"
@@ -316,7 +319,7 @@ final class Model: ObservableObject {
 
     private func installFailed() {
         phase = .needsSetup
-        error = "Setup didn't finish. Check your internet and try again"
+        error = "Setup didn't finish. Try again, or report it below"
     }
 
     // Each step is a cswap command; "y" answers any overwrite confirmation.
@@ -486,12 +489,51 @@ final class Model: ObservableObject {
         }
     }
 
+    /// Opens a new GitHub issue filled in with the version, macOS, the error on screen and the end of the log.
+    /// Links and emails are stripped from the log; the person sees everything before they submit.
+    func reportProblem() {
+        let log = (try? String(contentsOfFile: logPath, encoding: .utf8)) ?? ""
+        let email = try! NSRegularExpression(pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+        let tail = log.split(separator: "\n").suffix(40).map { line -> String in
+            let l = String(line)
+            if l.contains("http") { return "[link removed]" }
+            return email.stringByReplacingMatches(in: l, range: NSRange(l.startIndex..., in: l), withTemplate: "[email]")
+        }.joined(separator: "\n")
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        #if arch(arm64)
+        let arch = "Apple silicon"
+        #else
+        let arch = "Intel"
+        #endif
+        let body = """
+        **What happened?**
+
+
+        **Error shown:** \(error ?? "none")
+        **App:** \(appVersion) · **macOS:** \(os) · \(arch)
+
+        <details><summary>Log (last 40 lines)</summary>
+
+        ```
+        \(String(tail.suffix(5000)))
+        ```
+        </details>
+        """
+        var c = URLComponents(string: "https://github.com/\(repo)/issues/new")!
+        c.queryItems = [
+            URLQueryItem(name: "title", value: "Bug: \(error ?? "")"),
+            URLQueryItem(name: "body", value: body),
+            URLQueryItem(name: "template", value: "bug-report.md"),
+        ]
+        if let url = c.url { NSWorkspace.shared.open(url) }
+    }
+
     func setMenubar(_ on: Bool) async {
         busy = true
         defer { busy = false }
         // Older installs lack the menu bar extra; upgrading is a no-op when current.
         let cmd = on
-            ? "uv tool install --upgrade 'claude-swap[menubar]' && cswap menubar --install-service"
+            ? "\(installCswap) && cswap menubar --install-service"
             : "cswap menubar --uninstall-service"
         if await Shell.run(cmd).code != 0 {
             error = "Couldn't change the menu bar icon"
@@ -616,6 +658,11 @@ struct SetupView: View {
             }
         } footer: {
             ErrorText()
+            if model.error != nil {
+                Button("Report this problem") { model.reportProblem() }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
             Button { Task { await model.install() } } label: {
                 Text("Continue").frame(width: 200)
             }
@@ -770,6 +817,9 @@ struct ReadyView: View {
                 HStack {
                     ErrorText()
                     Spacer()
+                    Button("Report a Problem") { model.reportProblem() }
+                        .buttonStyle(.link)
+                        .font(.caption)
                     Button("Open Log") { NSWorkspace.shared.open(URL(fileURLWithPath: logPath)) }
                         .buttonStyle(.link)
                         .font(.caption)

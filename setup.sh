@@ -39,7 +39,7 @@ if ! command -v uv >/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
 fi
-uv tool install --upgrade claude-swap >/dev/null
+uv tool install --upgrade --python 3.12 claude-swap >/dev/null
 CSWAP="$(command -v cswap || echo "$HOME/.local/bin/cswap")"
 [[ -x "$CSWAP" ]] || die "cswap not found after install"
 
