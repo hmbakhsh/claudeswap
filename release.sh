@@ -31,4 +31,4 @@ gh api -X PUT "repos/$TAP_REPO/contents/$CASK" \
   -f content="$(printf '%s\n' "$NEW" | base64)" \
   -f sha="$(jq -r .sha <<<"$FILE")" >/dev/null
 
-echo "Released $V. Coworkers update with: brew upgrade --cask claudeswap"
+echo "Released $V. Coworkers update with: brew update && brew upgrade --cask claudeswap"

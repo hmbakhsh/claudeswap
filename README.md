@@ -36,7 +36,7 @@ brew install --cask hmbakhsh/tap/claudeswap
 
 Then open **ClaudeSwap** from your Applications folder. Click **Continue**, then **Add Account…** once for each Claude subscription you have.
 
-To update: `brew upgrade --cask claudeswap`
+To update: `brew update && brew upgrade --cask claudeswap`
 
 Installed it back when it was called Claude Account Switcher? Run the install line above once. It replaces the old app and keeps your accounts.
 
